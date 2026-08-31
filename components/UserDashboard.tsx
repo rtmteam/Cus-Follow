@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { User, Customer, VisitReason, Visit } from '../types';
-import { MapPin, Clock, CheckCircle, AlertCircle, Cloud, FileText, Search, Store, DoorOpen, DoorClosed, Wallet, AlertTriangle, CalendarClock, UserRound, MessageSquare, Ban } from 'lucide-react';
+import { MapPin, Clock, CheckCircle, AlertCircle, Cloud, FileText, Search, Store, DoorOpen, DoorClosed, Wallet, AlertTriangle, CalendarClock, UserRound, MessageSquare, Ban, ChevronDown } from 'lucide-react';
 import { calculateDistance, getDeviceFingerprint, getEgyptTime, getRealNetworkTime, checkDeveloperOptionsStatus, checkMockLocationStatus } from '../utils';
 
 interface UserDashboardProps {
@@ -110,6 +110,9 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
   // ---------- الواجهة ----------
   const [search, setSearch] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
+  /** القائمة مغلقة حتى يضغطها الموظف — الشاشة تبدأ نظيفة والزر أقرب لإبهامه */
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const pickerRef = useRef<HTMLDivElement | null>(null);
   const [isWorking, setIsWorking] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error' | 'none'; msg: string }>({ type: 'none', msg: '' });
   const [currentTime, setCurrentTime] = useState(getEgyptTime());
@@ -209,13 +212,43 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
     }
   }, [openVisits, lastUpdated, user.serialNumber]);
 
-  const filteredCustomers = (() => {
+  /** إغلاق القائمة عند الضغط خارجها — سلوك القوائم المنسدلة المتوقّع */
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [pickerOpen]);
+
+  /**
+   * نتائج البحث.
+   *
+   * يبحث في أربعة حقول: كود العميل · اسمه · كود المندوب · اسم المندوب.
+   * ويُقصَر المعروض على عدد قليل بلا بحث — قائمة بمئات العملاء داخل حاوية
+   * تمرير تُرهق الإبهام ولا تُوصل لأحد. الرقم يرتفع فور الكتابة.
+   */
+  const CUSTOMERS_BEFORE_SEARCH = 6;
+
+  const matchedCustomers = (() => {
     const q = search.trim().toLowerCase();
     if (!q) return myCustomers;
-    return myCustomers.filter(
-      (c) => c.code.toLowerCase().includes(q) || c.name.toLowerCase().includes(q)
+    return myCustomers.filter((c) =>
+      c.code.toLowerCase().includes(q) ||
+      c.name.toLowerCase().includes(q) ||
+      (c.repCode || '').toLowerCase().includes(q) ||
+      (c.repName || '').toLowerCase().includes(q)
     );
   })();
+
+  const isSearching = search.trim() !== '';
+  const visibleCustomers = isSearching
+    ? matchedCustomers.slice(0, 30)
+    : matchedCustomers.slice(0, CUSTOMERS_BEFORE_SEARCH);
+  const hiddenCount = matchedCustomers.length - visibleCustomers.length;
 
   const selectedCustomer = myCustomers.find((c) => c.id === selectedCustomerId) || null;
 
@@ -310,7 +343,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
   /**
    * إرسال أمر زيارة وقراءة ردّ الخادم على أربعة مستويات.
    *
-   * نفس التحقق الذي أثبت جدارته في مسار الحضور: 404 ثم response.ok ثم
+   * التحقق على أربعة مستويات: 404 ثم response.ok ثم
    * «هل الردّ HTML» ثم وجود نصّ النجاح بعينه. بلا هذا الترتيب يظهر النجاح
    * على شاشة الموظف بينما لم يُكتب شيء على الشيت.
    */
@@ -916,73 +949,119 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                     ) : null}
                   </div>
 
-                  {/* البحث بالكود أو بالاسم */}
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      placeholder="ابحث بكود العميل أو باسمه…"
-                      className="w-full bg-slate-900 border border-slate-700 text-white pr-11 pl-4 py-3.5 rounded-2xl font-bold outline-none focus:border-blue-500 transition-all text-right placeholder:text-slate-500"
-                    />
-                    <Search size={17} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
-                  </div>
+                  {/* ===== قائمة منسدلة: مغلقة حتى يضغطها الموظف ===== */}
+                  <div className="relative" ref={pickerRef}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPickerOpen((o) => !o);
+                        setStatus({ type: 'none', msg: '' });
+                      }}
+                      className={`w-full flex items-center justify-between gap-3 px-4 py-4 rounded-2xl border text-right transition-all min-h-[60px] ${
+                        pickerOpen ? 'bg-slate-900 border-blue-500' : 'bg-slate-900 border-slate-700'
+                      }`}
+                    >
+                      <span className="flex items-center gap-3 min-w-0">
+                        <Store size={18} className="text-slate-500 shrink-0" />
+                        {selectedCustomer ? (
+                          <span className="min-w-0">
+                            <span className="block text-sm font-black text-white truncate">{selectedCustomer.name}</span>
+                            <span className="block text-xs text-slate-400 font-bold mt-0.5">
+                              كود <span style={{ direction: 'ltr' }}>{selectedCustomer.code}</span>
+                              {selectedCustomer.repName && <span> · مندوب: {selectedCustomer.repName}</span>}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="text-sm font-bold text-slate-500">اضغط لاختيار العميل</span>
+                        )}
+                      </span>
+                      <ChevronDown
+                        size={20}
+                        className={`text-slate-500 shrink-0 transition-transform ${pickerOpen ? 'rotate-180' : ''}`}
+                      />
+                    </button>
 
-                  {/* قائمة العملاء */}
-                  <div className="max-h-72 overflow-y-auto space-y-2 pt-1">
-                    {myCustomers.length === 0 ? (
-                      <div className="text-center py-8 px-4">
-                        <Store size={36} className="mx-auto opacity-20 mb-3" />
-                        <div className="text-sm font-bold text-slate-300">لا يوجد عملاء مرتبطون بتوكيلك</div>
-                        <div className="text-xs text-slate-500 mt-1 leading-relaxed">
-                          توكيلك المسجَّل: «{myAgency || 'غير محدد'}». راجع المسؤول للتأكد من ربط العملاء به.
+                    {pickerOpen && (
+                      <div className="absolute z-40 mt-2 w-full bg-slate-900 border border-slate-600 rounded-2xl shadow-2xl overflow-hidden">
+                        <div className="relative p-2.5 border-b border-slate-700">
+                          <input
+                            type="text"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            autoFocus
+                            placeholder="اكتب كود العميل أو اسمه أو المندوب…"
+                            className="w-full bg-slate-950 border border-slate-700 text-white pr-10 pl-3 py-3 rounded-xl font-bold outline-none focus:border-blue-500 transition-all text-right text-sm placeholder:text-slate-500"
+                          />
+                          <Search size={16} className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                        </div>
+
+                        <div className="max-h-64 overflow-y-auto p-2 space-y-1.5">
+                          {myCustomers.length === 0 ? (
+                            <div className="text-center py-8 px-4">
+                              <Store size={32} className="mx-auto opacity-20 mb-3" />
+                              <div className="text-sm font-bold text-slate-300">لا يوجد عملاء مرتبطون بتوكيلك</div>
+                              <div className="text-xs text-slate-500 mt-1 leading-relaxed">
+                                توكيلك المسجَّل: «{myAgency || 'غير محدد'}». راجع المسؤول.
+                              </div>
+                            </div>
+                          ) : matchedCustomers.length === 0 ? (
+                            <div className="text-center py-8 px-4">
+                              <Search size={28} className="mx-auto opacity-20 mb-3" />
+                              <div className="text-sm font-bold text-slate-300">لا نتائج لبحثك</div>
+                              <div className="text-xs text-slate-500 mt-1">جرّب كود العميل، أو جزءاً من اسمه.</div>
+                            </div>
+                          ) : (
+                            <>
+                              {visibleCustomers.map((c) => {
+                                const d = distanceTo(c);
+                                const inRange = d !== null && d <= radiusOf(c);
+                                const isSelected = c.id === selectedCustomerId;
+                                return (
+                                  <button
+                                    key={c.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedCustomerId(c.id);
+                                      setPickerOpen(false);
+                                      setSearch('');
+                                      setStatus({ type: 'none', msg: '' });
+                                    }}
+                                    className={`w-full text-right p-3 rounded-xl border transition-all min-h-[56px] ${
+                                      isSelected ? 'bg-blue-600/15 border-blue-500' : 'bg-slate-950 border-slate-800'
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-between gap-3">
+                                      <div className="min-w-0 flex-1">
+                                        <div className="text-sm font-black text-white truncate">{c.name}</div>
+                                        <div className="text-xs text-slate-400 font-bold mt-0.5 truncate">
+                                          كود <span style={{ direction: 'ltr' }}>{c.code}</span>
+                                          {c.repName && <span> · مندوب: {c.repName}</span>}
+                                          {c.overdueDebt > 0 && (
+                                            <span className="text-red-400"> · أوفر ديو <span style={{ direction: 'ltr' }}>{money(c.overdueDebt)}</span></span>
+                                          )}
+                                        </div>
+                                      </div>
+                                      {d !== null && (
+                                        <span className={`ut-chip ${inRange ? 'ut-chip--ok' : 'ut-chip--warn'} shrink-0`}>
+                                          <span style={{ direction: 'ltr', fontWeight: 800 }}>{d}</span> م
+                                        </span>
+                                      )}
+                                    </div>
+                                  </button>
+                                );
+                              })}
+
+                              {hiddenCount > 0 && (
+                                <div className="text-center text-xs font-bold text-slate-500 py-2.5 leading-relaxed">
+                                  {isSearching
+                                    ? `و${hiddenCount} نتيجة أخرى — ضيّق بحثك.`
+                                    : `و${hiddenCount} عميلاً آخر — اكتب في خانة البحث للوصول إليهم.`}
+                                </div>
+                              )}
+                            </>
+                          )}
                         </div>
                       </div>
-                    ) : filteredCustomers.length === 0 ? (
-                      <div className="text-center py-8 px-4">
-                        <Search size={32} className="mx-auto opacity-20 mb-3" />
-                        <div className="text-sm font-bold text-slate-300">لا نتائج لبحثك</div>
-                        <div className="text-xs text-slate-500 mt-1">جرّب كود العميل بدل الاسم، أو جزءاً من الاسم.</div>
-                      </div>
-                    ) : (
-                      filteredCustomers.map((c) => {
-                        const d = distanceTo(c);
-                        const inRange = d !== null && d <= radiusOf(c);
-                        const isSelected = c.id === selectedCustomerId;
-                        return (
-                          <button
-                            key={c.id}
-                            type="button"
-                            onClick={() => {
-                              setSelectedCustomerId(c.id);
-                              setStatus({ type: 'none', msg: '' });
-                            }}
-                            className={`w-full text-right p-3.5 rounded-2xl border transition-all min-h-[56px] ${
-                              isSelected
-                                ? 'bg-blue-600/15 border-blue-500'
-                                : 'bg-slate-900 border-slate-700 hover:border-slate-600'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="min-w-0 flex-1">
-                                <div className="text-sm font-black text-white truncate">{c.name}</div>
-                                <div className="text-xs text-slate-400 font-bold mt-0.5">
-                                  كود <span style={{ direction: 'ltr' }}>{c.code}</span>
-                                  {c.repName && <span> · مندوب: {c.repName}</span>}
-                                  {c.overdueDebt > 0 && (
-                                    <span className="text-red-400"> · أوفر ديو <span style={{ direction: 'ltr' }}>{money(c.overdueDebt)}</span></span>
-                                  )}
-                                </div>
-                              </div>
-                              {d !== null && (
-                                <span className={`ut-chip ${inRange ? 'ut-chip--ok' : 'ut-chip--warn'} shrink-0`}>
-                                  <span style={{ direction: 'ltr', fontWeight: 800 }}>{d}</span> م
-                                </span>
-                              )}
-                            </div>
-                          </button>
-                        );
-                      })
                     )}
                   </div>
                 </div>

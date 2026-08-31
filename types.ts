@@ -15,16 +15,6 @@ export interface Job {
   canVisitMultipleBranches?: boolean; // New: Allow this job to have visit plans
 }
 
-export interface VisitPlan {
-  id: string;
-  userId: string;
-  userName: string;
-  userSerial?: string; // New: Serial number for easier matching
-  branchId: string;
-  branchName: string;
-  date: string; // ISO date string (YYYY-MM-DD)
-}
-
 export interface User {
   id: string;
   fullName: string;
@@ -41,9 +31,7 @@ export interface User {
   defaultBranch?: string;
   assignedBranch?: string;
   branch?: string;
-  registrationDate?: string; 
-  checkInTime?: string; 
-  checkOutTime?: string; 
+  registrationDate?: string;
 }
 
 export interface ReportAccount {
@@ -54,22 +42,6 @@ export interface ReportAccount {
   allowedEmployees?: string[]; // New: Allow specific employees access
 }
 
-export interface AttendanceRecord {
-  id: string;
-  userId: string;
-  userName: string;
-  userJob?: string;
-  serialNumber?: string; // الرقم التسلسلي للسجل
-  branchId: string;
-  branchName: string;
-  type: 'check-in' | 'check-out';
-  timestamp: string;
-  latitude: number;
-  longitude: number;
-  reason?: string; 
-  timeDiff?: string; 
-}
-
 export interface AppConfig {
   googleSheetLink: string;
   syncUrl: string;
@@ -77,7 +49,6 @@ export interface AppConfig {
   adminUsername: string;
   adminPassword?: string;
   lastUpdated?: string;
-  holidays?: string[];
   /** النطاق الافتراضي حول العميل بالمتر — يُستعمل حين يترك عمود النطاق فارغاً */
   defaultCustomerRadius?: number;
 }

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { User, Branch, AttendanceRecord, AppConfig, Job, ReportAccount, VisitPlan, Customer, VisitReason, Visit } from './types';
+import { User, Branch, AppConfig, Job, ReportAccount, Customer, VisitReason, Visit } from './types';
 import Login from './components/Login';
 import AdminDashboard from './components/AdminDashboard';
 import UserDashboard from './components/UserDashboard';
@@ -20,9 +20,7 @@ const App: React.FC = () => {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [reportAccounts, setReportAccounts] = useState<ReportAccount[]>([]);
-  const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [allUsers, setAllUsers] = useState<User[]>([]);
-  const [visitPlans, setVisitPlans] = useState<VisitPlan[]>([]);
 
   // ---------- متابعة العملاء ----------
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -205,11 +203,6 @@ const App: React.FC = () => {
           return prev;
         });
       }
-      if (data.visitPlans) {
-        setVisitPlans(data.visitPlans);
-        localStorage.setItem('attendance_visit_plans', JSON.stringify(data.visitPlans));
-      }
-
       // ---------- متابعة العملاء ----------
       if (Array.isArray(data.customers)) {
         setCustomers(data.customers);
@@ -230,7 +223,6 @@ const App: React.FC = () => {
       
       setConfig(prev => {
         const updatedConfig = { ...prev, lastUpdated: new Date().toISOString(), syncUrl: url, googleSheetLink: url };
-        if (data.holidays) updatedConfig.holidays = data.holidays;
         if (data.customerRadius && !isNaN(Number(data.customerRadius))) {
           updatedConfig.defaultCustomerRadius = Number(data.customerRadius);
         }
@@ -262,14 +254,12 @@ const App: React.FC = () => {
     const savedUser = localStorage.getItem('attendance_current_user');
     const savedBranches = localStorage.getItem('attendance_branches');
     const savedJobs = localStorage.getItem('attendance_jobs');
-    const savedPlans = localStorage.getItem('attendance_visit_plans');
     const savedUsers = localStorage.getItem('attendance_users');
     const savedReportAccounts = localStorage.getItem('attendance_report_accounts');
     
     if (savedUser) setCurrentUser(JSON.parse(savedUser));
     if (savedBranches) setBranches(JSON.parse(savedBranches));
     if (savedJobs) setJobs(JSON.parse(savedJobs));
-    if (savedPlans) setVisitPlans(JSON.parse(savedPlans));
     if (savedUsers) setAllUsers(JSON.parse(savedUsers));
     if (savedReportAccounts) setReportAccounts(JSON.parse(savedReportAccounts));
 
@@ -326,7 +316,7 @@ const App: React.FC = () => {
 
   // Check for global updates from GitHub static file
   // تفعيل فوري لشاشة الصيانة حين تكتشفها شاشة الموظف لحظة الضغط على
-  // حضور أو انصراف، دون انتظار دورة الفحص التالية
+  // فتح زيارة أو إغلاقها، دون انتظار دورة الفحص التالية
   useEffect(() => {
     const onMaintenance = (e: Event) => {
       const detail = (e as CustomEvent).detail || {};
@@ -461,7 +451,6 @@ const App: React.FC = () => {
 
   useEffect(() => { localStorage.setItem('attendance_branches', JSON.stringify(branches)); }, [branches]);
   useEffect(() => { localStorage.setItem('attendance_jobs', JSON.stringify(jobs)); }, [jobs]);
-  useEffect(() => { localStorage.setItem('attendance_visit_plans', JSON.stringify(visitPlans)); }, [visitPlans]);
 
   const logAction = useCallback(async (action: string, details: string = '') => {
     if (!config.syncUrl || !navigator.onLine) return;
@@ -735,9 +724,8 @@ const App: React.FC = () => {
             currentUser.role === 'admin' ? (
               <AdminDashboard 
                 branches={branches} setBranches={setBranches} jobs={jobs} setJobs={setJobs}
-                records={records} config={config} setConfig={setConfig} allUsers={allUsers} setAllUsers={setAllUsers}
+                config={config} setConfig={setConfig} allUsers={allUsers} setAllUsers={setAllUsers}
                 reportAccounts={reportAccounts} setReportAccounts={setReportAccounts}
-                visitPlans={visitPlans} setVisitPlans={setVisitPlans}
                 customers={customers} setCustomers={setCustomers}
                 onRefresh={() => syncWithCloud(config.syncUrl)} isSyncing={isSyncing}
                 logAction={logAction}

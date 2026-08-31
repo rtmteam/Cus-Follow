@@ -1,6 +1,6 @@
 
 import React, { useState, useRef } from 'react';
-import { Branch, AttendanceRecord, AppConfig, User, Job, ReportAccount, VisitPlan, Customer } from '../types';
+import { Branch, AppConfig, User, Job, ReportAccount, Customer } from '../types';
 import { MapPin, Table, Trash2, Shield, CloudUpload, Briefcase, RotateCcw, Globe, Users, Plus, FileSpreadsheet, Download, Share2, Smartphone, RefreshCw, Edit2, Check, X, Unlink, Key, Lock, Eye, EyeOff, Clock, Monitor, UserCheck, Calendar, Navigation, ArrowUp, ArrowDown, GripVertical, KeyRound, Loader2, Store, Search, Wallet, AlertTriangle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import ReportsView from './ReportsView';
@@ -10,15 +10,12 @@ interface AdminDashboardProps {
   setBranches: React.Dispatch<React.SetStateAction<Branch[]>>;
   jobs: Job[];
   setJobs: React.Dispatch<React.SetStateAction<Job[]>>;
-  records: AttendanceRecord[];
   config: AppConfig;
   setConfig: React.Dispatch<React.SetStateAction<AppConfig>>;
   allUsers: User[];
   setAllUsers: React.Dispatch<React.SetStateAction<User[]>>;
   reportAccounts?: ReportAccount[];
   setReportAccounts?: React.Dispatch<React.SetStateAction<ReportAccount[]>>;
-  visitPlans: VisitPlan[];
-  setVisitPlans: React.Dispatch<React.SetStateAction<VisitPlan[]>>;
   customers: Customer[];
   setCustomers: React.Dispatch<React.SetStateAction<Customer[]>>;
   onRefresh: () => void;
@@ -27,8 +24,8 @@ interface AdminDashboardProps {
 }
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ 
-  branches, setBranches, jobs, setJobs, records, config, setConfig, allUsers, setAllUsers, 
-  reportAccounts = [], setReportAccounts, visitPlans, setVisitPlans, customers, setCustomers,
+  branches, setBranches, jobs, setJobs, config, setConfig, allUsers, setAllUsers,
+  reportAccounts = [], setReportAccounts, customers, setCustomers,
   onRefresh, isSyncing, logAction
 }) => {
   const [activeTab, setActiveTab] = useState<'branches' | 'jobs' | 'users' | 'customers' | 'report-access' | 'reports' | 'settings'>('branches');
@@ -162,10 +159,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       // تحديث انتقائي بناءً على نوع البيانات
       // Selective update based on dataType
-      if (!dataType || dataType === 'branches' || dataType === 'jobs' || dataType === 'holidays') {
+      if (!dataType || dataType === 'branches' || dataType === 'jobs') {
         payload.branches = branches;
         payload.jobs = jobs;
-        payload.holidays = config.holidays || [];
       }
       
       if (!dataType || dataType === 'users') {
@@ -176,10 +172,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         payload.reportAccounts = reportAccounts;
       }
       
-      if (!dataType || dataType === 'visitPlans') {
-        payload.visitPlans = visitPlans;
-      }
-
       if (!dataType || dataType === 'customers') {
         payload.customers = customers;
       }
@@ -192,7 +184,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       // كان يعمي الاستجابة فتظهر رسالة النجاح مهما ردّ الخادم — وبعد إضافة
       // المصادقة على updateSystem صار الرفض ممكناً، فكان المسؤول يرى «تم
       // بنجاح» ولم يُحفظ شيء. text/plain طلب بسيط لا يستدعي preflight،
-      // وهو نفس ما يفعله مسار تسجيل الحضور الذي يقرأ الردّ بنجاح.
+      // وهو نفس ما يفعله مسار الزيارات الذي يقرأ الردّ بنجاح.
       const response = await fetch(config.syncUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -404,8 +396,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
               deviceId: "",
               deviceIds: [],
               allowedDeviceCount: parseInt(item["عدد الاجهزة"] || "1"),
-              checkInTime: item["موعد الحضور"] || "09:00",
-              checkOutTime: item["موعد الانصراف"] || "17:00",
               registrationDate: new Date().toISOString()
             };
             return newUser;
@@ -643,8 +633,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                  setEditingUserId(user.id); 
                                   setEditUserData({
                                     ...user,
-                                    checkInTime: normalizeToTimeInput(user.checkInTime),
-                                    checkOutTime: normalizeToTimeInput(user.checkOutTime),
                                     allowedDeviceCount: user.allowedDeviceCount || 1
                                   });
                                 }} className="text-blue-400 hover:bg-blue-900/20 p-1.5 rounded"><Edit2 size={16}/></button>
