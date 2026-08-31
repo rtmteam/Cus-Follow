@@ -1,0 +1,17 @@
+{
+  "appId": "com.uniteam.attendance.v3",
+  "appName": "Uniteam v3",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "url": "https://bahaamohamed51-coder.github.io/Uniteam-v3/",
+    "cleartext": true,
+    "androidScheme": "https",
+    "errorPath": "offline.html"
+  },
+  "android": {
+    "allowMixedContent": true,
+    "captureInput": false,
+    "backgroundColor": "#0A1428"
+  }
+}

@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0f172a">
+  <title>Uniteam</title>
+  <style>
+    /*
+      صفحة بديلة لصفحة الخطأ الافتراضية في WebView.
+      كل شيء بداخلها مضمّن: لا صور خارجية ولا خطوط من الإنترنت،
+      لأنها تظهر تحديداً حين ينقطع الاتصال.
+    */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: #0f172a;
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                   "Helvetica Neue", Arial, "Noto Naskh Arabic", sans-serif;
+      text-align: center;
+      -webkit-user-select: none;
+      user-select: none;
+      overscroll-behavior: none;
+    }
+
+    .card { width: 100%; max-width: 340px; }
+
+    .logo { margin-bottom: 28px; }
+
+    h1 {
+      font-size: 21px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      color: #f1f5f9;
+    }
+
+    p {
+      font-size: 15px;
+      line-height: 1.9;
+      color: #94a3b8;
+      margin-bottom: 30px;
+    }
+
+    button {
+      width: 100%;
+      padding: 15px 20px;
+      font-size: 16px;
+      font-weight: 700;
+      font-family: inherit;
+      color: #fff;
+      background: #2563eb;
+      border: none;
+      border-radius: 14px;
+      cursor: pointer;
+      transition: background .15s, transform .1s;
+    }
+
+    button:active { background: #1d4ed8; transform: scale(.98); }
+    button:disabled { opacity: .6; }
+
+    .hint {
+      margin-top: 22px;
+      font-size: 13px;
+      color: #64748b;
+      line-height: 1.9;
+    }
+
+    .dot {
+      display: inline-block;
+      width: 7px; height: 7px;
+      margin-inline-end: 7px;
+      border-radius: 50%;
+      background: #ef4444;
+      vertical-align: middle;
+    }
+
+    .dot.online { background: #22c55e; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      display: inline-block;
+      width: 15px; height: 15px;
+      margin-inline-start: 9px;
+      border: 2px solid rgba(255,255,255,.35);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      vertical-align: -3px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <!-- الشعار مرسوم بـ SVG داخل الصفحة، فلا يعتمد على أي ملف صورة -->
+    <div class="logo">
+      <svg width="104" height="104" viewBox="0 0 104 104" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect x="2" y="2" width="100" height="100" rx="26" fill="#1e293b" stroke="#334155" stroke-width="2"/>
+        <circle cx="52" cy="46" r="25" stroke="#64748b" stroke-width="3.5" fill="none"/>
+        <path d="M52 32 V46 L61 53" stroke="#94a3b8" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="44" cy="74" r="8" fill="#475569"/>
+        <path d="M30 92 C30 83 36.5 78 44 78 C51.5 78 58 83 58 92" fill="#475569"/>
+        <path d="M70 66 C77 66 82 71.5 82 78 C82 86 70 95 70 95 C70 95 58 86 58 78 C58 71.5 63 66 70 66 Z" fill="#334155" stroke="#64748b" stroke-width="2.5"/>
+        <path d="M65 78 L69 82 L76 74" stroke="#94a3b8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        <!-- شطبة حمراء لانقطاع الاتصال، تُخفى في حالة الصيانة -->
+        <line id="slash" x1="22" y1="22" x2="82" y2="82" stroke="#ef4444" stroke-width="4.5" stroke-linecap="round" opacity="0.85"/>
+        <!-- تروس الصيانة، مخفية افتراضياً -->
+        <g id="gear" style="display:none">
+          <circle cx="52" cy="52" r="17" fill="none" stroke="#f59e0b" stroke-width="4"/>
+          <circle cx="52" cy="52" r="6" fill="#f59e0b"/>
+          <g stroke="#f59e0b" stroke-width="4" stroke-linecap="round">
+            <line x1="52" y1="27" x2="52" y2="35"/>
+            <line x1="52" y1="69" x2="52" y2="77"/>
+            <line x1="27" y1="52" x2="35" y2="52"/>
+            <line x1="69" y1="52" x2="77" y2="52"/>
+          </g>
+        </g>
+      </svg>
+    </div>
+
+    <h1 id="title">لا يوجد اتصال بالإنترنت</h1>
+    <p id="message">يحتاج التطبيق إلى اتصال لتحميل بياناتك.<br>فعّل بيانات الهاتف أو الواي فاي ثم أعد المحاولة.</p>
+
+    <button id="retry" type="button">إعادة المحاولة</button>
+
+    <div class="hint">
+      <span class="dot" id="dot"></span>
+      <span id="status">جارٍ التحقق من الاتصال…</span>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var btn      = document.getElementById('retry');
+      var dot      = document.getElementById('dot');
+      var status   = document.getElementById('status');
+      var title    = document.getElementById('title');
+      var message  = document.getElementById('message');
+      var slash    = document.getElementById('slash');
+      var gear     = document.getElementById('gear');
+      var BTN_TEXT = 'إعادة المحاولة';
+
+      /** الجسر الأصلي متاح داخل التطبيق فقط، وغير موجود في المتصفح */
+      function bridge() {
+        var b = window.AndroidBridge;
+        return (b && typeof b === 'object') ? b : null;
+      }
+
+      /**
+       * فحص الاتصال من نظام أندرويد حين يكون متاحاً.
+       * navigator.onLine داخل WebView يعيد true لمجرد وجود واجهة شبكة نشطة،
+       * فيظهر "عاد الاتصال" والهاتف غير متصل فعلاً.
+       */
+      function isOnline() {
+        var b = bridge();
+        if (b && typeof b.isConnected === 'function') {
+          try { return b.isConnected() === true; } catch (e) {}
+        }
+        return navigator.onLine;
+      }
+
+      /**
+       * الصفحة نفسها تظهر لسببين مختلفين تماماً:
+       *   - الهاتف غير متصل بالإنترنت
+       *   - الهاتف متصل لكن الخدمة متوقفة (إيقاف النشر أو صيانة أو عطل خادم)
+       * عرض رسالة "لا يوجد اتصال" في الحالة الثانية يضلّل الموظف،
+       * فيظل يعبث بإعدادات الشبكة بلا فائدة.
+       */
+      function setMode(maintenance) {
+        if (maintenance) {
+          title.textContent = 'التطبيق تحت الصيانة';
+          message.innerHTML = 'يجري تحديث النظام حالياً.<br>حاول مرة أخرى بعد قليل.';
+          slash.style.display = 'none';
+          gear.style.display  = '';
+        } else {
+          title.textContent = 'لا يوجد اتصال بالإنترنت';
+          message.innerHTML = 'يحتاج التطبيق إلى اتصال لتحميل بياناتك.<br>فعّل بيانات الهاتف أو الواي فاي ثم أعد المحاولة.';
+          slash.style.display = '';
+          gear.style.display  = 'none';
+        }
+      }
+
+      function render() {
+        if (isOnline()) {
+          // الاتصال سليم، إذن العطل من جهة الخدمة لا من جهة الموظف
+          setMode(true);
+          dot.className = 'dot online';
+          status.textContent = 'الاتصال سليم — الخدمة غير متاحة حالياً';
+        } else {
+          setMode(false);
+          dot.className = 'dot';
+          status.textContent = 'الجهاز غير متصل بالإنترنت';
+        }
+      }
+
+      function resetButton(message) {
+        btn.disabled = false;
+        btn.textContent = BTN_TEXT;
+        if (message) status.textContent = message;
+      }
+
+      btn.addEventListener('click', function () {
+        // ما زال الاتصال منقطعاً: لا نحاول التنقّل أصلاً
+        if (!isOnline()) {
+          dot.className = 'dot';
+          status.textContent = 'ما زال الاتصال منقطعاً — تحقق من الشبكة';
+          return;
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = 'جارٍ إعادة التحميل<span class="spinner"></span>';
+
+        var b = bridge();
+        if (b && typeof b.reloadApp === 'function' && b.canReloadApp && b.canReloadApp()) {
+          // داخل التطبيق: يحمّل الجسر رابط التطبيق الأصلي في نفس الـ WebView.
+          // استخدام location.reload هنا خطأ: عنوان هذه الصفحة محلي،
+          // وإعادة تحميله تفتح المتصفح وتفشل بـ ERR_CONNECTION_REFUSED.
+          try {
+            b.reloadApp();
+          } catch (e) {
+            resetButton('تعذّرت إعادة المحاولة — أعد فتح التطبيق');
+          }
+        } else {
+          // خارج التطبيق: إعادة تحميل عادية في المتصفح
+          setTimeout(function () { location.reload(); }, 200);
+        }
+
+        // إن لم يحدث أي تنقّل خلال 8 ثوانٍ نُعيد الزر لحالته
+        setTimeout(function () {
+          if (btn.disabled) resetButton('الخدمة ما زالت غير متاحة — حاول بعد قليل');
+        }, 8000);
+      });
+
+      window.addEventListener('online', render);
+      window.addEventListener('offline', render);
+      render();
+
+      // تحديث حالة المؤشر دورياً دون إعادة تحميل تلقائية،
+      // فلو كان الخادم نفسه متوقفاً لدخل التطبيق في حلقة لا تنتهي.
+      setInterval(function () {
+        if (!btn.disabled) render();
+      }, 3000);
+    })();
+  </script>
+</body>
+</html>

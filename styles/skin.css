@@ -1,0 +1,272 @@
+/* ==========================================================================
+   Uniteam Skin — طبقة توحيد المظهر
+   ==========================================================================
+   تُعيد تعريف أصناف Tailwind المستخدمة في التطبيق لتتبع لوحة الهوية الجديدة.
+   الغرض: تطبيق النمط الجديد على كل الصفحات دفعة واحدة دون لمس أي منطق عمل.
+
+   تُحمَّل بعد Tailwind، فتغلبه في الترتيب.
+   ========================================================================== */
+
+/* ---------- الأسطح الداكنة: من الرمادي المائل للأزرق إلى الكحلي ---------- */
+.bg-slate-950 { background-color: var(--nv-950) !important; }
+.bg-slate-900 { background-color: var(--nv-900) !important; }
+.bg-slate-800 { background-color: var(--nv-850) !important; }
+.bg-slate-700 { background-color: var(--nv-800) !important; }
+.bg-slate-600 { background-color: var(--nv-700) !important; }
+
+.bg-slate-900\/50 { background-color: rgba(10, 20, 40, .55) !important; }
+.bg-slate-900\/30 { background-color: rgba(10, 20, 40, .35) !important; }
+.bg-slate-700\/50 { background-color: rgba(18, 35, 65, .55) !important; }
+.bg-slate-800\/50 { background-color: rgba(14, 27, 51, .55) !important; }
+
+.bg-slate-100 { background-color: #E9EFF8 !important; }
+.bg-slate-50  { background-color: #F4F7FC !important; }
+
+/* ---------- الحدود ---------- */
+.border-slate-800    { border-color: rgba(255, 255, 255, .06) !important; }
+.border-slate-700    { border-color: rgba(255, 255, 255, .09) !important; }
+.border-slate-700\/50{ border-color: rgba(255, 255, 255, .07) !important; }
+.border-slate-700\/30{ border-color: rgba(255, 255, 255, .05) !important; }
+.border-slate-600    { border-color: rgba(255, 255, 255, .14) !important; }
+.border-slate-500    { border-color: rgba(255, 255, 255, .2) !important; }
+.divide-slate-700\/30 > * + * { border-color: rgba(255, 255, 255, .05) !important; }
+
+/* ---------- النصوص ---------- */
+.text-slate-300 { color: #C6D5EA !important; }
+.text-slate-400 { color: var(--on-dark-2) !important; }
+.text-slate-500 { color: #7E93B2 !important; }
+.text-slate-600 { color: #61779A !important; }
+
+/* ---------- الأزرق: هوية أوضح وأعمق ---------- */
+.bg-blue-600    { background-color: var(--el-600) !important; }
+.bg-blue-500    { background-color: var(--el-500) !important; }
+.bg-blue-700    { background-color: var(--el-700) !important; }
+.hover\:bg-blue-500:hover { background-color: var(--el-500) !important; }
+.hover\:bg-blue-700:hover { background-color: var(--el-700) !important; }
+
+.text-blue-400  { color: var(--el-400) !important; }
+.text-blue-500  { color: var(--el-500) !important; }
+.text-blue-600  { color: var(--el-600) !important; }
+.text-blue-100  { color: var(--el-100) !important; }
+
+.border-blue-500     { border-color: var(--el-500) !important; }
+.border-blue-800\/40 { border-color: rgba(37, 99, 235, .35) !important; }
+.border-blue-900\/30 { border-color: rgba(37, 99, 235, .28) !important; }
+.bg-blue-900\/20     { background-color: rgba(37, 99, 235, .14) !important; }
+.bg-blue-900\/30     { background-color: rgba(37, 99, 235, .2) !important; }
+.bg-blue-50          { background-color: var(--el-50) !important; }
+
+/* التدرّج القديم يصبح تدرّج الهوية */
+.bg-gradient-to-r.from-blue-600,
+.bg-gradient-to-r.from-blue-600.to-indigo-600 { background-image: var(--grad-brand) !important; }
+
+/* ---------- الحالات ---------- */
+.bg-green-600 { background-color: var(--ok) !important; }
+.bg-green-500 { background-color: #34D399 !important; }
+.hover\:bg-green-500:hover { background-color: #34D399 !important; }
+.text-green-300 { color: #6EE7B7 !important; }
+.text-green-400 { color: #34D399 !important; }
+.text-green-500 { color: var(--ok) !important; }
+.text-emerald-400 { color: #34D399 !important; }
+.bg-green-900\/20 { background-color: rgba(16, 185, 129, .14) !important; }
+.border-green-800\/50 { border-color: rgba(16, 185, 129, .3) !important; }
+
+.bg-orange-600 { background-color: var(--warn) !important; }
+.bg-orange-500 { background-color: #FBBF24 !important; }
+.text-orange-400 { color: #FBBF24 !important; }
+.text-orange-500 { color: var(--warn) !important; }
+.bg-orange-50 { background-color: var(--warn-bg) !important; }
+.border-orange-200 { border-color: #F6DDB8 !important; }
+.bg-orange-600\/5 { background-color: rgba(245, 158, 11, .09) !important; }
+
+.bg-red-600 { background-color: var(--bad) !important; }
+.bg-red-500 { background-color: #F87171 !important; }
+.text-red-200 { color: #FECACA !important; }
+.text-red-400 { color: #F87171 !important; }
+.text-red-500 { color: var(--bad) !important; }
+.text-red-600 { color: #DC2626 !important; }
+.bg-red-900\/20 { background-color: rgba(239, 68, 68, .14) !important; }
+.bg-red-900\/30 { background-color: rgba(239, 68, 68, .2) !important; }
+.bg-red-900\/40 { background-color: rgba(239, 68, 68, .26) !important; }
+.bg-red-500\/10 { background-color: rgba(239, 68, 68, .12) !important; }
+.border-red-500\/50 { border-color: rgba(239, 68, 68, .45) !important; }
+.border-red-900\/30 { border-color: rgba(239, 68, 68, .3) !important; }
+.bg-red-50 { background-color: var(--bad-bg) !important; }
+.border-red-200\/80 { border-color: #F2C9C9 !important; }
+
+.bg-indigo-600 { background-color: #6366F1 !important; }
+.text-indigo-400 { color: #A5B4FC !important; }
+.bg-indigo-600\/5 { background-color: rgba(99, 102, 241, .09) !important; }
+.bg-blue-600\/5 { background-color: rgba(37, 99, 235, .09) !important; }
+.bg-blue-600\/10 { background-color: rgba(37, 99, 235, .14) !important; }
+.hover\:bg-blue-600\/10:hover { background-color: rgba(37, 99, 235, .14) !important; }
+
+/* ==========================================================================
+   لمسات الهوية على المكوّنات القائمة
+   ========================================================================== */
+
+/* البطاقات الداكنة: حواف أنعم وظل أعمق */
+.bg-slate-800.rounded-3xl,
+.bg-slate-800.rounded-2xl {
+  background-image: var(--grad-navy) !important;
+  box-shadow: var(--sh-3) !important;
+}
+
+/* الأزرار الزرقاء الأساسية: تدرّج + توهّج */
+button.bg-blue-600,
+button.bg-blue-600\:hover {
+  background-image: var(--grad-brand) !important;
+  box-shadow: var(--glow-brand) !important;
+  transition: filter .18s ease, transform .08s ease !important;
+}
+button.bg-blue-600:hover:not(:disabled) { filter: brightness(1.1); }
+button.bg-blue-600:active:not(:disabled) { transform: scale(.98); }
+
+button.bg-green-600 {
+  background-image: var(--grad-ok) !important;
+  box-shadow: 0 6px 20px rgba(16, 185, 129, .32) !important;
+}
+button.bg-red-600 {
+  background-image: var(--grad-bad) !important;
+  box-shadow: 0 6px 20px rgba(239, 68, 68, .3) !important;
+}
+
+/* الحقول: حلقة تركيز بلون الهوية */
+input:focus, select:focus, textarea:focus {
+  border-color: var(--el-500) !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, .22) !important;
+  outline: none !important;
+}
+
+input::placeholder, textarea::placeholder { color: #64789B !important; }
+
+/* القوائم المنسدلة داخل الأسطح الداكنة */
+select option { background-color: var(--nv-900) !important; color: var(--on-dark) !important; }
+
+/* خلفية الصفحة */
+body { background-color: var(--bg) !important; }
+
+/* شريط التمرير */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: var(--r-full); border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--tx-3); }
+
+/* تحديد النص */
+::selection { background: rgba(37, 99, 235, .25); }
+
+/* ==========================================================================
+   حركات خفيفة تُشعر بالجودة دون إزعاج
+   ========================================================================== */
+@media (prefers-reduced-motion: no-preference) {
+  .rounded-3xl, .rounded-2xl { transition: box-shadow .2s ease, border-color .2s ease; }
+  button { transition: filter .18s ease, transform .08s ease, background-color .18s ease; }
+  button:active:not(:disabled) { transform: scale(.985); }
+}
+
+/* ==========================================================================
+   تكملة التغطية — أصناف نادرة الاستخدام في الشاشات الفرعية
+   ========================================================================== */
+.bg-slate-500  { background-color: var(--nv-600) !important; }
+.text-slate-100{ color: #E9F0FA !important; }
+.text-slate-200{ color: #D5E1F1 !important; }
+.text-slate-900{ color: var(--tx) !important; }
+
+.bg-blue-400   { background-color: var(--el-400) !important; }
+.border-blue-500\/50 { border-color: rgba(59, 130, 246, .5) !important; }
+.border-blue-400 { border-color: var(--el-400) !important; }
+.text-blue-300 { color: var(--el-300) !important; }
+.text-blue-200 { color: var(--el-200) !important; }
+
+.bg-orange-400 { background-color: #FBBF24 !important; }
+.bg-orange-900\/20 { background-color: rgba(245, 158, 11, .14) !important; }
+.border-orange-800\/50 { border-color: rgba(245, 158, 11, .3) !important; }
+
+/* ==========================================================================
+   طبقة الطباعة — هرم من أربع درجات بدل وزن واحد
+   ==========================================================================
+   الخط المحمّل في index.html هو IBM Plex Sans Arabic بأوزان 300–700،
+   فالوزن 900 (font-black) غير موجود ويسقط إلى 700 — أي أنه يُرسم مطابقاً
+   لـ font-bold تماماً. النتيجة أن كل نص في التطبيق كان بوزن 700 بلا استثناء،
+   فلا يبرز شيء لأن كل شيء بارز.
+
+   الهرم هنا:  700 عناوين وأزرار · 600 نص مؤكَّد · 500 ثانوي · 400 عادي
+   ترتيب القواعد مقصود — المتأخّر يغلب عند تساوي الأولوية.
+   ========================================================================== */
+
+/* ١) الأساس: النص العادي عادي، والحقول تُكتب بوزن مريح للقراءة */
+body, input, select, textarea { font-weight: 400; }
+
+/* ٢) الدرجتان العلويتان */
+.font-black    { font-weight: 700; }
+.font-bold     { font-weight: 600; }
+.font-semibold { font-weight: 600; }
+.font-medium   { font-weight: 500; }
+
+/* ٣) النص الصغير ثانويّ بطبيعته.
+      الوزن الثقيل عند هذه الأحجام يغلق العيون الداخلية للحروف العربية
+      (الفتحة داخل ه · ع · ف · م) فتلتحم الحروف ويصعب تمييز الكلمة. */
+.text-\[8px\],
+.text-\[9px\],
+.text-\[10px\],
+.text-\[11px\],
+.text-xs { font-weight: 500; }
+
+/* ٤) الأزرار تبقى واضحة مهما صغر خطها — هي نداء الإجراء */
+button { font-weight: 600; }
+button.font-black, .ut-btn, .login-tab { font-weight: 700; }
+
+/* ٥) العربية تتّصل حروفها، وأي تباعد يفكّ هذا الاتصال فتبدو الكلمة مقطّعة.
+      letter-spacing صُمّم لخطوط لاتينية حروفها منفصلة أصلاً. */
+[dir="rtl"] .tracking-wide,
+[dir="rtl"] .tracking-wider,
+[dir="rtl"] .tracking-widest,
+[dir="rtl"] .tracking-tight,
+[dir="rtl"] .tracking-tighter { letter-spacing: 0; }
+
+/* استثناء صريح لما هو لاتينيّ فعلاً: أضف الصنف latin بجانب tracking */
+[dir="rtl"] .latin { letter-spacing: revert; }
+
+/* ==========================================================================
+   سلّم الزوايا — أربع درجات بدل خمس
+   ==========================================================================
+   كان rounded-xl (12px) و rounded-2xl (16px) مستخدمَين بالتساوي تقريباً
+   (40 و41 مرة) على عناصر متشابهة. فرق 4px تحسّه العين ولا تستطيع تسميته،
+   وهو من أكثر مصادر الإحساس بعدم الانضباط شيوعاً. نُدمجهما.
+
+   السلّم بعد الدمج:  8px رقائق صغيرة · 16px حقول وبطاقات · 24px أسطح كبيرة
+   ========================================================================== */
+.rounded-xl { border-radius: 16px; }
+.text-orange-300 { color: #FCD34D !important; }
+
+.bg-green-600\/10 { background-color: rgba(16, 185, 129, .12) !important; }
+.border-green-500\/50 { border-color: rgba(16, 185, 129, .45) !important; }
+.text-green-600 { color: #059669 !important; }
+.bg-green-50 { background-color: var(--ok-bg) !important; }
+.border-green-200 { border-color: #BFE8CE !important; }
+
+.bg-red-950\/50 { background-color: rgba(69, 10, 10, .5) !important; }
+.border-red-800\/60 { border-color: rgba(153, 27, 27, .6) !important; }
+.border-red-800\/50 { border-color: rgba(153, 27, 27, .5) !important; }
+.border-red-500\/30 { border-color: rgba(239, 68, 68, .3) !important; }
+.bg-red-100 { background-color: #FDECEC !important; }
+.hover\:bg-red-100:hover { background-color: #FBDCDC !important; }
+
+.bg-gray-50 { background-color: var(--bg) !important; }
+.bg-gray-100 { background-color: #E9EFF8 !important; }
+.text-gray-500 { color: var(--tx-2) !important; }
+.text-gray-800 { color: var(--tx) !important; }
+.border-gray-200 { border-color: var(--line) !important; }
+
+/* تغطية نهائية — شفافيات متبقية */
+.bg-slate-950\/60 { background-color: rgba(5, 11, 24, .6) !important; }
+.bg-green-500\/10 { background-color: rgba(16, 185, 129, .12) !important; }
+.bg-green-900\/30 { background-color: rgba(16, 185, 129, .2) !important; }
+.border-green-900\/30 { border-color: rgba(16, 185, 129, .28) !important; }
+.border-green-800\/30 { border-color: rgba(16, 185, 129, .24) !important; }
+.bg-blue-400\/10 { background-color: rgba(96, 165, 250, .12) !important; }
+.border-blue-800\/30 { border-color: rgba(37, 99, 235, .26) !important; }
+.bg-red-400\/10 { background-color: rgba(248, 113, 113, .12) !important; }
+.bg-red-600\/10 { background-color: rgba(239, 68, 68, .12) !important; }
+.bg-orange-400\/10 { background-color: rgba(251, 191, 36, .12) !important; }
+.border-orange-400\/20 { border-color: rgba(251, 191, 36, .22) !important; }

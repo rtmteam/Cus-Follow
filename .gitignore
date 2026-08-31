@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+output/
+
+# Android (يُنشأ تلقائياً أثناء البناء على GitHub)
+android/
+ios/
+
+# مفاتيح التوقيع - عدا مفتاح المشروع الثابت المطلوب للبناء
+*.keystore
+*.jks
+!native/android/uniteam-release.keystore
+
+# Editors
+.vscode/
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
