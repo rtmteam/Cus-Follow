@@ -97,6 +97,9 @@ export interface Customer {
   /** كود العميل — يبحث به الموظف */
   code: string;
   name: string;
+  /** المندوب المسؤول عن حساب العميل — غير الموظف الزائر */
+  repCode: string;
+  repName: string;
   /** كود التوكيل الذي يتبعه العميل */
   agencyCode: string;
   agencyName: string;
@@ -126,6 +129,8 @@ export interface VisitAnswers {
   overdueDays: number;
   /** موعد السداد المتفق عليه — YYYY-MM-DD */
   paymentDate: string;
+  /** ملاحظة حرّة من الموظف — اختيارية */
+  comment?: string;
 }
 
 /**
@@ -145,6 +150,9 @@ export interface Visit {
   customerId: string;
   customerCode: string;
   customerName: string;
+  /** مندوب العميل وقت الزيارة — لقطة، فقد يتغيّر في الشيت بعدها */
+  repCode: string;
+  repName: string;
   agencyCode: string;
   agencyName: string;
 
@@ -162,5 +170,10 @@ export interface Visit {
 
   answers?: VisitAnswers;
 
-  status: 'open' | 'closed';
+  /**
+   * `cancelled` تعني أن الموظف تراجع عن الزيارة.
+   * الصفّ يبقى على الشيت عمداً: تكرار الفتح والإلغاء عند عميل بعينه
+   * مؤشّر لا يظهر إطلاقاً لو مُحي الصفّ.
+   */
+  status: 'open' | 'closed' | 'cancelled';
 }

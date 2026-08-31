@@ -1,10 +1,10 @@
 {
-  "appId": "com.uniteam.attendance.v3",
-  "appName": "Uniteam v3",
+  "appId": "com.uniteam.cusfollow",
+  "appName": "Uniteam-Cus Follow",
   "webDir": "dist",
   "bundledWebRuntime": false,
   "server": {
-    "url": "https://bahaamohamed51-coder.github.io/Uniteam-v3/",
+    "url": "https://bahaamohamed51-coder.github.io/Cus-Follow/",
     "cleartext": true,
     "androidScheme": "https",
     "errorPath": "offline.html"

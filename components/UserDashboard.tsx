@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { User, Customer, VisitReason, Visit } from '../types';
-import { MapPin, Clock, CheckCircle, AlertCircle, Cloud, FileText, Search, Store, DoorOpen, DoorClosed, Wallet, AlertTriangle, CalendarClock } from 'lucide-react';
+import { MapPin, Clock, CheckCircle, AlertCircle, Cloud, FileText, Search, Store, DoorOpen, DoorClosed, Wallet, AlertTriangle, CalendarClock, UserRound, MessageSquare, Ban } from 'lucide-react';
 import { calculateDistance, getDeviceFingerprint, getEgyptTime, getRealNetworkTime, checkDeveloperOptionsStatus, checkMockLocationStatus } from '../utils';
 
 interface UserDashboardProps {
@@ -123,6 +123,8 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
   const [actualDebt, setActualDebt] = useState('');
   const [overdueDays, setOverdueDays] = useState('');
   const [paymentDate, setPaymentDate] = useState('');
+  /** ملاحظة حرّة — اختيارية، ولا تمنع الإغلاق إن تُركت فارغة */
+  const [comment, setComment] = useState('');
 
   // ساعة التوقيت المصري
   useEffect(() => {
@@ -406,6 +408,8 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
         customerId: customer.id,
         customerCode: customer.code,
         customerName: customer.name,
+        repCode: customer.repCode,
+        repName: customer.repName,
         agencyCode: customer.agencyCode,
         agencyName: customer.agencyName,
         totalDebtAtVisit: customer.totalDebt,
@@ -439,6 +443,111 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
     overdueDays.trim() !== '' && !isNaN(Number(overdueDays)) &&
     paymentDate.trim() !== '';
 
+  const resetAnswers = () => {
+    setReasonChoice('');
+    setOtherReason('');
+    setActualDebt('');
+    setOverdueDays('');
+    setPaymentDate('');
+    setComment('');
+  };
+
+  /**
+   * العميل المرجع لفحص الموقع أثناء الزيارة المفتوحة.
+   *
+   * قد يكون اختفى من الشيت بعد فتح الزيارة، فنسقط إلى لقطة الزيارة نفسها
+   * بدل أن يُحبس الموظف في زيارة يتعذّر إغلاقها أو إلغاؤها.
+   */
+  const customerForActiveVisit = (): Customer | null => {
+    if (!activeVisit) return null;
+    return (
+      myCustomers.find((c) => c.code === activeVisit.customerCode) ||
+      ({
+        id: activeVisit.customerId,
+        code: activeVisit.customerCode,
+        name: activeVisit.customerName,
+        repCode: activeVisit.repCode,
+        repName: activeVisit.repName,
+        agencyCode: activeVisit.agencyCode,
+        agencyName: activeVisit.agencyName,
+        totalDebt: activeVisit.totalDebtAtVisit,
+        overdueDebt: activeVisit.overdueDebtAtVisit,
+        latitude: activeVisit.startLatitude,
+        longitude: activeVisit.startLongitude
+      } as Customer)
+    );
+  };
+
+  /**
+   * إلغاء الزيارة بالكامل.
+   *
+   * لا يشترط الإجابة على الأسئلة — فالإلغاء تراجع لا إتمام. لكنه **يشترط
+   * الموقع**: بدونه يصير الإلغاء مهرباً من فحص النطاق، إذ يفتح الموظف
+   * الزيارة عند العميل ثم يمشي ويلغيها من أي مكان.
+   */
+  const handleCancelVisit = async () => {
+    if (!activeVisit) return;
+
+    if (!confirm(
+      `إلغاء الزيارة عند ${activeVisit.customerName}؟\n\n` +
+      `لن تُحتسب زيارةً، وستُسجَّل كزيارة ملغاة في التقارير.`
+    )) return;
+
+    const customer = customerForActiveVisit();
+    if (!customer) return;
+
+    setIsWorking(true);
+    setStatus({ type: 'none', msg: '' });
+
+    const coords = await guardAndLocate(customer, 'إلغاء زيارة');
+    if (!coords) {
+      setIsWorking(false);
+      return;
+    }
+
+    try {
+      const result = await sendVisitCommand(
+        {
+          action: 'cancelVisit',
+          visitId: activeVisit.id,
+          nationalId: user.nationalId,
+          serialNumber: user.serialNumber,
+          deviceId: getDeviceFingerprint(),
+          customerCode: activeVisit.customerCode,
+          latitude: coords.lat,
+          longitude: coords.lng,
+          comment: comment.trim()
+        },
+        'Visit Cancelled'
+      );
+
+      if (!result.ok) {
+        setStatus({ type: 'error', msg: result.text });
+        logAction('فشل إلغاء زيارة', `العميل: ${activeVisit.customerName} | ردّ الخادم: ${result.text}`);
+        setIsWorking(false);
+        return;
+      }
+
+      const name = activeVisit.customerName;
+      setActiveVisit(null);
+      localStorage.removeItem(ACTIVE_VISIT_KEY);
+      resetAnswers();
+      setSelectedCustomerId('');
+      setSearch('');
+
+      setStatus({ type: 'success', msg: `أُلغيت الزيارة عند ${name}. يمكنك فتح زيارة جديدة الآن.` });
+      logAction('إلغاء زيارة', `العميل: ${name} (${activeVisit.customerCode})`);
+      onRefresh();
+    } catch (err: any) {
+      console.error('Cancel Visit Error:', err);
+      const msg = describeError(err);
+      setStatus({ type: 'error', msg });
+      logAction('فشل إلغاء زيارة', `العميل: ${activeVisit.customerName} | السبب: ${msg}`);
+    } finally {
+      setIsWorking(false);
+    }
+  };
+
   const handleCloseVisit = async () => {
     if (!activeVisit) return;
 
@@ -447,20 +556,8 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
       return;
     }
 
-    // العميل قد يكون اختفى من الشيت بعد فتح الزيارة — نستعمل لقطة الزيارة
-    const customer =
-      myCustomers.find((c) => c.code === activeVisit.customerCode) ||
-      ({
-        id: activeVisit.customerId,
-        code: activeVisit.customerCode,
-        name: activeVisit.customerName,
-        agencyCode: activeVisit.agencyCode,
-        agencyName: activeVisit.agencyName,
-        totalDebt: activeVisit.totalDebtAtVisit,
-        overdueDebt: activeVisit.overdueDebtAtVisit,
-        latitude: activeVisit.startLatitude,
-        longitude: activeVisit.startLongitude
-      } as Customer);
+    const customer = customerForActiveVisit();
+    if (!customer) return;
 
     setIsWorking(true);
     setStatus({ type: 'none', msg: '' });
@@ -485,7 +582,8 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
           overdueReason: resolvedReason,
           actualDebt: Number(actualDebt),
           overdueDays: Number(overdueDays),
-          paymentDate: paymentDate
+          paymentDate: paymentDate,
+          comment: comment.trim()
         },
         'Visit Closed'
       );
@@ -506,7 +604,8 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
           overdueReason: resolvedReason,
           actualDebt: Number(actualDebt),
           overdueDays: Number(overdueDays),
-          paymentDate
+          paymentDate,
+          comment: comment.trim() || undefined
         },
         status: 'closed'
       };
@@ -517,12 +616,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
 
       setActiveVisit(null);
       localStorage.removeItem(ACTIVE_VISIT_KEY);
-
-      setReasonChoice('');
-      setOtherReason('');
-      setActualDebt('');
-      setOverdueDays('');
-      setPaymentDate('');
+      resetAnswers();
       setSelectedCustomerId('');
       setSearch('');
 
@@ -632,6 +726,20 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                       </div>
                     </div>
 
+                    {(activeVisit.repName || activeVisit.repCode) && (
+                      <div className="bg-slate-900 rounded-xl p-3 border border-slate-700">
+                        <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 mb-1">
+                          <UserRound size={12} /> مندوب العميل
+                        </div>
+                        <div className="text-sm font-black text-white">
+                          {activeVisit.repName || '—'}
+                          {activeVisit.repCode && (
+                            <span className="text-slate-500 font-bold text-xs"> · <span style={{ direction: 'ltr' }}>{activeVisit.repCode}</span></span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-2 gap-2">
                       <div className="bg-slate-900 rounded-xl p-3 border border-slate-700">
                         <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 mb-1">
@@ -721,6 +829,18 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                       style={{ direction: 'ltr' }}
                     />
                   </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-400 flex items-center gap-1.5">
+                      <MessageSquare size={13} /> ملاحظات إضافية <span className="text-slate-500 font-medium">(اختياري)</span>
+                    </label>
+                    <textarea
+                      value={comment}
+                      onChange={(e) => setComment(e.target.value)}
+                      placeholder="أي ملاحظة عن الزيارة أو العميل…"
+                      className="w-full bg-slate-900 border border-slate-700 text-white px-4 py-3 rounded-2xl font-bold outline-none focus:border-blue-500 transition-all text-right h-24 resize-none text-sm leading-relaxed placeholder:text-slate-500"
+                    />
+                  </div>
                 </div>
 
                 {statusBox}
@@ -731,17 +851,34 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                   </div>
                 )}
 
-                <button
-                  disabled={isWorking || !answersReady}
-                  onClick={handleCloseVisit}
-                  className="w-full py-6 rounded-2xl font-black text-lg text-white flex flex-col items-center justify-center gap-1 transition-all active:scale-95 disabled:opacity-50"
-                  style={{ backgroundImage: 'var(--grad-warn)', boxShadow: '0 8px 26px rgba(245,158,11,.35)' }}
-                >
-                  <span className="flex items-center gap-2">
-                    <DoorClosed size={22} /> إغلاق الزيارة
-                  </span>
-                  {isWorking && <span className="text-xs font-medium animate-pulse">جارٍ التحقق مع السيرفر…</span>}
-                </button>
+                {/* الإغلاق يأخذ عرضين والإلغاء عرضاً واحداً: الفجوة البصرية
+                    بينهما مقصودة — الإلغاء إجراء مدمّر لا يُضغط بالخطأ. */}
+                <div className="grid grid-cols-3 gap-3">
+                  <button
+                    disabled={isWorking || !answersReady}
+                    onClick={handleCloseVisit}
+                    className="col-span-2 py-6 rounded-2xl font-black text-lg text-white flex flex-col items-center justify-center gap-1 transition-all active:scale-95 disabled:opacity-50"
+                    style={{ backgroundImage: 'var(--grad-warn)', boxShadow: '0 8px 26px rgba(245,158,11,.35)' }}
+                  >
+                    <span className="flex items-center gap-2">
+                      <DoorClosed size={22} /> إغلاق الزيارة
+                    </span>
+                    {isWorking && <span className="text-xs font-medium animate-pulse">جارٍ التحقق…</span>}
+                  </button>
+
+                  <button
+                    disabled={isWorking}
+                    onClick={handleCancelVisit}
+                    className="py-6 rounded-2xl font-black text-sm text-red-300 flex flex-col items-center justify-center gap-1.5 transition-all active:scale-95 disabled:opacity-50 border border-red-800/60 bg-red-950/40"
+                  >
+                    <Ban size={20} />
+                    <span>إلغاء الزيارة</span>
+                  </button>
+                </div>
+
+                <div className="text-[11px] font-bold text-slate-500 text-center leading-relaxed">
+                  الإلغاء لا يحتاج إجابة على الأسئلة، لكنه يشترط وجودك في مكان العميل مثل الإغلاق.
+                </div>
               </>
             ) : (
               /* ================= اختيار عميل ================= */
@@ -831,6 +968,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                                 <div className="text-sm font-black text-white truncate">{c.name}</div>
                                 <div className="text-xs text-slate-400 font-bold mt-0.5">
                                   كود <span style={{ direction: 'ltr' }}>{c.code}</span>
+                                  {c.repName && <span> · مندوب: {c.repName}</span>}
                                   {c.overdueDebt > 0 && (
                                     <span className="text-red-400"> · أوفر ديو <span style={{ direction: 'ltr' }}>{money(c.overdueDebt)}</span></span>
                                   )}
@@ -928,6 +1066,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                       التجاوز: <span style={{ direction: 'ltr' }}>{v.answers.overdueDays}</span> يوم
                     </div>
                     <div>موعد السداد: <span style={{ direction: 'ltr' }}>{v.answers.paymentDate}</span></div>
+                    {v.answers.comment && <div className="pt-1 border-t border-slate-700">ملاحظة: {v.answers.comment}</div>}
                   </div>
                 )}
               </div>

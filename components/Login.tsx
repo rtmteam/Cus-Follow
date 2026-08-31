@@ -579,7 +579,7 @@ export default function Login({
     { id: 'login',    label: 'دخول الموظف', icon: LogIn,       desc: 'سجّل زياراتك للعملاء' },
     { id: 'register', label: 'حساب جديد',   icon: UserPlus,    desc: 'أنشئ حسابك لأول مرة' },
     { id: 'admin',    label: 'الإدارة',      icon: ShieldAlert, desc: 'لوحة تحكم المسؤول' },
-    { id: 'reports',  label: 'التقارير',    icon: FileSpreadsheet, desc: 'عرض وتصدير سجلات الحضور والانصراف' }
+    { id: 'reports',  label: 'التقارير',    icon: FileSpreadsheet, desc: 'عرض وتصدير السجلات' }
   ];
 
   const showSidebar = !(mode === 'reports' && isReportsLoggedIn);
@@ -594,7 +594,7 @@ export default function Login({
             <div className="flex justify-center mb-3">
               <LogoMark size={132} variant="full" />
             </div>
-            <div className="login-side__sub">نظام الحضور والانصراف</div>
+            <div className="login-side__sub">Cus Follow · متابعة العملاء</div>
           </div>
 
           <nav className="login-side__nav">

@@ -154,7 +154,8 @@ function doPost(e) {
         var custSheet = getOrCreateSheet(ss, "Customers");
         custSheet.clear();
         custSheet.appendRow([
-          "كود العميل", "اسم العميل", "كود التوكيل", "اسم التوكيل",
+          "كود العميل", "اسم العميل", "كود المندوب", "اسم المندوب",
+          "كود التوكيل", "اسم التوكيل",
           "إجمالي المديونية", "المديونية الأوفر ديو",
           "خط العرض", "خط الطول", "النطاق"
         ]);
@@ -162,6 +163,8 @@ function doPost(e) {
           custSheet.appendRow([
             c.code ? c.code.toString() : "",
             c.name ? c.name.toString() : "",
+            c.repCode ? c.repCode.toString() : "",
+            c.repName ? c.repName.toString() : "",
             c.agencyCode ? c.agencyCode.toString() : "",
             c.agencyName ? c.agencyName.toString() : "",
             isNaN(parseFloat(c.totalDebt)) ? 0 : parseFloat(c.totalDebt),
@@ -194,175 +197,6 @@ function doPost(e) {
   }
 
   // ======================================================
-  // 2. تسجيل الحضور (Secure Attendance Recording)
-  // ======================================================
-  if (data.action === 'saveAttendance') {
-    var lock = LockService.getScriptLock();
-    try {
-      lock.waitLock(15000); 
-      
-      // أ. التحقق الأمني: هل الموظف موجود في قاعدة البيانات؟
-      // (Security Check: Verify User Exists)
-      var userSheet = getOrCreateSheet(ss, "Users");
-      var userRows = userSheet.getDataRange().getValues();
-      var userRowIndex = -1;
-      var targetNID = data.nationalId ? data.nationalId.toString() : "";
-      
-      // متغيرات نحتاجها لاحقاً للتحقق من السرعة
-      var lastUpdateDate = null;
-      var lastGPSStr = "";
-      
-      for (var k = 1; k < userRows.length; k++) {
-        if (userRows[k][2].toString() === targetNID) {
-          userRowIndex = k + 1; // 1-based index
-          lastUpdateDate = userRows[k][9] ? new Date(userRows[k][9]) : null;
-          lastGPSStr = userRows[k][13] ? userRows[k][13].toString() : ""; 
-          break;
-        }
-      }
-
-      // إذا لم يتم العثور على الموظف، نرفض العملية فوراً
-      if (userRowIndex === -1) {
-         return ContentService.createTextOutput("Error: Access Denied. Your account is no longer registered in the system.");
-      }
-
-      // التحقق من Device ID
-      var rawDevice = userRows[userRowIndex-1][5] ? userRows[userRowIndex-1][5].toString() : "";
-      var allowedDeviceIds = [];
-      if (rawDevice.startsWith("[") && rawDevice.endsWith("]")) {
-         try {
-           allowedDeviceIds = JSON.parse(rawDevice);
-         } catch(e) {
-           allowedDeviceIds = [rawDevice];
-         }
-      } else {
-         allowedDeviceIds = rawDevice ? [rawDevice] : [];
-      }
-
-      var incomingDeviceId = data.deviceId ? data.deviceId.toString() : "";
-      if (allowedDeviceIds.indexOf(incomingDeviceId) === -1) {
-         return ContentService.createTextOutput("Security Alert: عفواً، هذا الجهاز غير مسجل أو غير مصرح لك بتسجيل الحضور منه.");
-      }
-
-      // ب. جلب إعدادات الفروع
-      var configSheet = getOrCreateSheet(ss, "Config");
-      var configRows = configSheet.getDataRange().getValues();
-      var serverBranches = [];
-      for (var i = 1; i < configRows.length; i++) {
-        if (configRows[i][0] === "branches") {
-          try { serverBranches = JSON.parse(configRows[i][1]); } catch(e) {}
-        }
-      }
-
-      // ج. البحث عن الفرع
-      var targetBranch = null;
-      if (data.branchId) {
-        for (var b = 0; b < serverBranches.length; b++) {
-          if (serverBranches[b].id === data.branchId) {
-            targetBranch = serverBranches[b];
-            break;
-          }
-        }
-      }
-
-      if (!targetBranch) {
-        return ContentService.createTextOutput("Security Error: Invalid or Unknown Branch ID.");
-      }
-
-      // د. منطق التحقق من الموقع والمسافة
-      var userLat = parseFloat(data.latitude);
-      var userLng = parseFloat(data.longitude);
-      // حارس: فرع بلا اسم كان يرمي استثناءً هنا فيتحوّل إلى رسالة عامة غامضة
-      var targetBranchName = targetBranch.name ? targetBranch.name.toString().trim() : "";
-      var isOutDoor = targetBranchName.toLowerCase() === "out door";
-      var reason = data.reason ? data.reason.trim() : "";
-      var now = new Date();
-
-      if (isOutDoor) {
-        if (reason === "") {
-          return ContentService.createTextOutput("Error: Reason is required for Out Door branch.");
-        }
-      } else {
-        if (isNaN(userLat) || isNaN(userLng)) {
-          return ContentService.createTextOutput("Error: Invalid GPS Coordinates.");
-        }
-        var distance = calculateHaversineDistance(userLat, userLng, targetBranch.latitude, targetBranch.longitude);
-        var allowedRadius = targetBranch.radius || 100;
-
-        if (distance > (allowedRadius + 15)) {
-           return ContentService.createTextOutput("Security Alert: You are too far from the branch. Calculated Distance: " + Math.round(distance) + "m");
-        }
-      }
-
-      // هـ. كشف الانتقال المستحيل (Impossible Travel Detection)
-      // نستخدم البيانات التي جلبناها في الخطوة (أ)
-      if (lastUpdateDate && lastGPSStr && lastGPSStr.includes(",")) {
-         var parts = lastGPSStr.split(",");
-         var lastLat = parseFloat(parts[0]);
-         var lastLng = parseFloat(parts[1]);
-
-         if (!isNaN(lastLat) && !isNaN(lastLng)) {
-           // حساب المسافة بين الموقع الحالي والموقع السابق
-           var travelDistKm = calculateHaversineDistance(lastLat, lastLng, userLat, userLng) / 1000;
-           // حساب الفرق الزمني بالساعات
-           var timeDiffHours = (now - lastUpdateDate) / (1000 * 60 * 60);
-           
-           if (timeDiffHours < 0.016) timeDiffHours = 0.016; // Minimum 1 minute
-
-           var speedKmH = travelDistKm / timeDiffHours;
-           var MAX_POSSIBLE_SPEED = 500; 
-
-           if (travelDistKm > 1 && speedKmH > MAX_POSSIBLE_SPEED) {
-             return ContentService.createTextOutput("Security Alert: Impossible Travel Detected! Speed: " + Math.round(speedKmH) + " km/h is physically impossible.");
-           }
-         }
-      }
-
-      // و. الحفظ وتحديث بيانات المستخدم
-      var attSheet = getOrCreateSheet(ss, "Attendance");
-      
-      // نستخدم الرقم التسلسلي من شيت المستخدمين لضمان الدقة
-      var sn = userRows[userRowIndex-1][3];
-
-      // كود الفرع يُؤخذ من إعدادات الخادم لا من العميل — العميل يرسل
-      // معرّف الفرع فقط، والكود يُحلّ هنا من قائمة الفروع المعتمدة.
-      var targetBranchCode = targetBranch.code ? targetBranch.code.toString().trim() : "";
-
-      // حارس: إن لم يُدرج العمود يدوياً بعد، نرفض الكتابة بدل أن نكتب
-      // صفوفاً مزاحة عموداً واحداً يستحيل تصحيحها لاحقاً.
-      var columnError = assertAttendanceColumns(attSheet);
-      if (columnError !== "") {
-        return ContentService.createTextOutput(columnError);
-      }
-
-      attSheet.appendRow([
-        now,
-        data.userName,
-        sn || "",
-        data.userJob,
-        targetBranchCode,
-        targetBranchName,
-        data.type,
-        now.toISOString(),
-        data.latitude + "," + data.longitude,
-        reason,
-        data.timeDiff || ""
-      ]);
-      
-      // تحديث آخر موقع ووقت للمستخدم
-      userSheet.getRange(userRowIndex, 10).setValue(now);
-      userSheet.getRange(userRowIndex, 14).setValue(data.latitude + "," + data.longitude);
-      
-      return ContentService.createTextOutput("Attendance Recorded");
-      
-    } catch (e) {
-      return ContentService.createTextOutput("Error: Server processing failed. " + e.message);
-    } finally {
-      lock.releaseLock();
-    }
-  }
-
-  // ======================================================
   // 2.ب فتح زيارة عميل (Start Visit)
   // ======================================================
   // يُكتب الصفّ فور الفتح لا عند الإغلاق: فلو انطفأ هاتف الموظف أو
@@ -381,12 +215,12 @@ function doPost(e) {
       // زيارة مفتوحة واحدة في المرة. بدون هذا الفحص يستطيع الموظف
       // فتح زيارات عند عدة عملاء ويتركها كلها معلّقة.
       for (var v = 1; v < visitRows.length; v++) {
-        var rowStatus = visitRows[v][20] ? visitRows[v][20].toString().trim() : "";
+        var rowStatus = visitRows[v][23] ? visitRows[v][23].toString().trim() : "";
         var rowSerial = visitRows[v][3] ? visitRows[v][3].toString().trim() : "";
         if (rowStatus === "open" && rowSerial === check.serialNumber) {
           return ContentService.createTextOutput(
             "Error: لديك زيارة مفتوحة بالفعل عند " + (visitRows[v][8] || "عميل آخر") +
-            ". أغلقها أولاً قبل فتح زيارة جديدة."
+            ". أغلقها أو ألغِها أولاً قبل فتح زيارة جديدة."
           );
         }
       }
@@ -404,18 +238,21 @@ function doPost(e) {
         cust.agencyName,                            // 7  اسم التوكيل
         cust.code,                                  // 8  كود العميل
         cust.name,                                  // 9  اسم العميل
-        startNow.toISOString(),                     // 10 وقت الفتح
-        check.lat + "," + check.lng,                // 11 إحداثيات الفتح
-        "",                                         // 12 وقت الإغلاق
-        "",                                         // 13 إحداثيات الإغلاق
-        "",                                         // 14 مدة الزيارة
-        "",                                         // 15 سبب التجاوز
-        "",                                         // 16 المديونية الفعلية
-        "",                                         // 17 أيام التجاوز
-        "",                                         // 18 موعد السداد
-        cust.totalDebt,                             // 19 إجمالي المديونية وقت الزيارة
-        cust.overdueDebt,                           // 20 الأوفر ديو وقت الزيارة
-        "open"                                      // 21 الحالة
+        cust.repCode,                               // 10 كود المندوب
+        cust.repName,                               // 11 اسم المندوب
+        startNow.toISOString(),                     // 12 وقت الفتح
+        check.lat + "," + check.lng,                // 13 إحداثيات الفتح
+        "",                                         // 14 وقت الإغلاق
+        "",                                         // 15 إحداثيات الإغلاق
+        "",                                         // 16 مدة الزيارة
+        "",                                         // 17 سبب التجاوز
+        "",                                         // 18 المديونية الفعلية
+        "",                                         // 19 أيام التجاوز
+        "",                                         // 20 موعد السداد
+        "",                                         // 21 ملاحظات الموظف
+        cust.totalDebt,                             // 22 إجمالي المديونية وقت الزيارة
+        cust.overdueDebt,                           // 23 الأوفر ديو وقت الزيارة
+        "open"                                      // 24 الحالة
       ]);
 
       userSheetTouch(ss, check.userRowIndex, startNow, check.lat, check.lng);
@@ -469,9 +306,9 @@ function doPost(e) {
         return ContentService.createTextOutput("Security Alert: هذه الزيارة ليست باسمك.");
       }
 
-      if ((rowData[20] ? rowData[20].toString().trim() : "") === "closed") {
-        return ContentService.createTextOutput("Error: هذه الزيارة مغلقة بالفعل.");
-      }
+      var currentStatus = rowData[23] ? rowData[23].toString().trim() : "";
+      if (currentStatus === "closed")    return ContentService.createTextOutput("Error: هذه الزيارة مغلقة بالفعل.");
+      if (currentStatus === "cancelled") return ContentService.createTextOutput("Error: هذه الزيارة ملغاة.");
 
       // الأسئلة إلزامية — الواجهة تمنع الإرسال بدونها، والخادم لا يثق بها
       var reason = data.overdueReason ? data.overdueReason.toString().trim() : "";
@@ -481,21 +318,89 @@ function doPost(e) {
       }
 
       var endNow = new Date();
-      var startMs = rowData[9] ? new Date(rowData[9]).getTime() : endNow.getTime();
+      var startMs = rowData[11] ? new Date(rowData[11]).getTime() : endNow.getTime();
       var durationMin = Math.max(0, Math.round((endNow.getTime() - startMs) / 60000));
 
-      visitSheet.getRange(targetRow, 12).setValue(endNow.toISOString());
-      visitSheet.getRange(targetRow, 13).setValue(check.lat + "," + check.lng);
-      visitSheet.getRange(targetRow, 14).setValue(durationMin);
-      visitSheet.getRange(targetRow, 15).setValue(reason);
-      visitSheet.getRange(targetRow, 16).setValue(data.actualDebt !== undefined ? data.actualDebt : "");
-      visitSheet.getRange(targetRow, 17).setValue(data.overdueDays !== undefined ? data.overdueDays : "");
-      visitSheet.getRange(targetRow, 18).setValue(paymentDate);
-      visitSheet.getRange(targetRow, 21).setValue("closed");
+      visitSheet.getRange(targetRow, 14).setValue(endNow.toISOString());
+      visitSheet.getRange(targetRow, 15).setValue(check.lat + "," + check.lng);
+      visitSheet.getRange(targetRow, 16).setValue(durationMin);
+      visitSheet.getRange(targetRow, 17).setValue(reason);
+      visitSheet.getRange(targetRow, 18).setValue(data.actualDebt !== undefined ? data.actualDebt : "");
+      visitSheet.getRange(targetRow, 19).setValue(data.overdueDays !== undefined ? data.overdueDays : "");
+      visitSheet.getRange(targetRow, 20).setValue(paymentDate);
+      visitSheet.getRange(targetRow, 21).setValue(data.comment ? data.comment.toString().trim() : "");
+      visitSheet.getRange(targetRow, 24).setValue("closed");
 
       userSheetTouch(ss, check.userRowIndex, endNow, check.lat, check.lng);
 
       return ContentService.createTextOutput("Visit Closed");
+
+    } catch (e) {
+      return ContentService.createTextOutput("Error: Server processing failed. " + e.message);
+    } finally {
+      lock.releaseLock();
+    }
+  }
+
+  // ======================================================
+  // 2.د إلغاء زيارة (Cancel Visit)
+  // ======================================================
+  // الصفّ يبقى ويُعلَّم cancelled: تكرار الفتح والإلغاء عند عميل بعينه
+  // مؤشّر لا يظهر إطلاقاً لو مُحي الصفّ.
+  //
+  // فحص الموقع مطلوب هنا أيضاً — بدونه يصير الإلغاء مهرباً من فحص النطاق:
+  // يفتح الزيارة عند العميل ثم يمشي ويلغيها من أي مكان.
+  if (data.action === 'cancelVisit') {
+    var lock = LockService.getScriptLock();
+    try {
+      lock.waitLock(15000);
+
+      var check = validateVisitRequest(ss, data);
+      if (check.error) return ContentService.createTextOutput(check.error);
+
+      var visitId = data.visitId ? data.visitId.toString().trim() : "";
+      if (visitId === "") {
+        return ContentService.createTextOutput("Error: معرّف الزيارة مفقود.");
+      }
+
+      var visitSheet = getOrCreateSheet(ss, "Visits");
+      var visitRows = visitSheet.getDataRange().getValues();
+      var targetRow = -1;
+
+      for (var cr = 1; cr < visitRows.length; cr++) {
+        if (visitRows[cr][1] && visitRows[cr][1].toString().trim() === visitId) {
+          targetRow = cr + 1;
+          break;
+        }
+      }
+
+      if (targetRow === -1) {
+        return ContentService.createTextOutput("Error: لم يُعثر على هذه الزيارة على الخادم.");
+      }
+
+      var cRow = visitRows[targetRow - 1];
+
+      var cOwner = cRow[3] ? cRow[3].toString().trim() : "";
+      if (cOwner !== check.serialNumber) {
+        return ContentService.createTextOutput("Security Alert: هذه الزيارة ليست باسمك.");
+      }
+
+      var cStatus = cRow[23] ? cRow[23].toString().trim() : "";
+      if (cStatus === "closed")    return ContentService.createTextOutput("Error: هذه الزيارة مغلقة ولا يمكن إلغاؤها.");
+      if (cStatus === "cancelled") return ContentService.createTextOutput("Error: هذه الزيارة ملغاة بالفعل.");
+
+      var cancelNow = new Date();
+      var cStartMs = cRow[11] ? new Date(cRow[11]).getTime() : cancelNow.getTime();
+
+      visitSheet.getRange(targetRow, 14).setValue(cancelNow.toISOString());
+      visitSheet.getRange(targetRow, 15).setValue(check.lat + "," + check.lng);
+      visitSheet.getRange(targetRow, 16).setValue(Math.max(0, Math.round((cancelNow.getTime() - cStartMs) / 60000)));
+      visitSheet.getRange(targetRow, 21).setValue(data.comment ? data.comment.toString().trim() : "");
+      visitSheet.getRange(targetRow, 24).setValue("cancelled");
+
+      userSheetTouch(ss, check.userRowIndex, cancelNow, check.lat, check.lng);
+
+      return ContentService.createTextOutput("Visit Cancelled");
 
     } catch (e) {
       return ContentService.createTextOutput("Error: Server processing failed. " + e.message);
@@ -855,17 +760,19 @@ function readCustomers(ss) {
   for (var i = 1; i < rows.length; i++) {
     var code = rows[i][0] ? rows[i][0].toString().trim() : "";
     if (code === "") continue; // صفّ فارغ في وسط الشيت لا يُنشئ عميلاً وهمياً
-    var radius = parseInt(rows[i][8]);
+    var radius = parseInt(rows[i][10]);
     list.push({
       id: code,
       code: code,
       name: rows[i][1] ? rows[i][1].toString().trim() : "",
-      agencyCode: rows[i][2] ? rows[i][2].toString().trim() : "",
-      agencyName: rows[i][3] ? rows[i][3].toString().trim() : "",
-      totalDebt: parseFloat(rows[i][4]) || 0,
-      overdueDebt: parseFloat(rows[i][5]) || 0,
-      latitude: parseFloat(rows[i][6]) || 0,
-      longitude: parseFloat(rows[i][7]) || 0,
+      repCode: rows[i][2] ? rows[i][2].toString().trim() : "",
+      repName: rows[i][3] ? rows[i][3].toString().trim() : "",
+      agencyCode: rows[i][4] ? rows[i][4].toString().trim() : "",
+      agencyName: rows[i][5] ? rows[i][5].toString().trim() : "",
+      totalDebt: parseFloat(rows[i][6]) || 0,
+      overdueDebt: parseFloat(rows[i][7]) || 0,
+      latitude: parseFloat(rows[i][8]) || 0,
+      longitude: parseFloat(rows[i][9]) || 0,
       radius: (!isNaN(radius) && radius > 0) ? radius : null
     });
   }
@@ -1077,18 +984,20 @@ function doGet(e) {
       var vSheet = getOrCreateSheet(ss, "Visits");
       var vRows = vSheet.getDataRange().getValues();
       for (var ov = 1; ov < vRows.length; ov++) {
-        if ((vRows[ov][20] ? vRows[ov][20].toString().trim() : "") !== "open") continue;
+        if ((vRows[ov][23] ? vRows[ov][23].toString().trim() : "") !== "open") continue;
         result.openVisits.push({
-          id:                 vRows[ov][1] ? vRows[ov][1].toString() : "",
-          userName:           vRows[ov][2] ? vRows[ov][2].toString() : "",
-          serialNumber:       vRows[ov][3] ? vRows[ov][3].toString() : "",
-          agencyCode:         vRows[ov][5] ? vRows[ov][5].toString() : "",
-          agencyName:         vRows[ov][6] ? vRows[ov][6].toString() : "",
-          customerCode:       vRows[ov][7] ? vRows[ov][7].toString() : "",
-          customerName:       vRows[ov][8] ? vRows[ov][8].toString() : "",
-          startTime:          vRows[ov][9] ? vRows[ov][9].toString() : "",
-          totalDebtAtVisit:   parseFloat(vRows[ov][18]) || 0,
-          overdueDebtAtVisit: parseFloat(vRows[ov][19]) || 0,
+          id:                 vRows[ov][1]  ? vRows[ov][1].toString()  : "",
+          userName:           vRows[ov][2]  ? vRows[ov][2].toString()  : "",
+          serialNumber:       vRows[ov][3]  ? vRows[ov][3].toString()  : "",
+          agencyCode:         vRows[ov][5]  ? vRows[ov][5].toString()  : "",
+          agencyName:         vRows[ov][6]  ? vRows[ov][6].toString()  : "",
+          customerCode:       vRows[ov][7]  ? vRows[ov][7].toString()  : "",
+          customerName:       vRows[ov][8]  ? vRows[ov][8].toString()  : "",
+          repCode:            vRows[ov][9]  ? vRows[ov][9].toString()  : "",
+          repName:            vRows[ov][10] ? vRows[ov][10].toString() : "",
+          startTime:          vRows[ov][11] ? vRows[ov][11].toString() : "",
+          totalDebtAtVisit:   parseFloat(vRows[ov][21]) || 0,
+          overdueDebtAtVisit: parseFloat(vRows[ov][22]) || 0,
           status: 'open'
         });
       }
@@ -1409,20 +1318,23 @@ function getOrCreateSheet(ss, name) {
       sheet.appendRow(["ID", "User ID", "User Name", "Branch ID", "Branch Name", "Date"]);
     } else if (name === "Customers") {
       sheet.appendRow([
-        "كود العميل", "اسم العميل", "كود التوكيل", "اسم التوكيل",
+        "كود العميل", "اسم العميل", "كود المندوب", "اسم المندوب",
+        "كود التوكيل", "اسم التوكيل",
         "إجمالي المديونية", "المديونية الأوفر ديو",
         "خط العرض", "خط الطول", "النطاق"
       ]);
     } else if (name === "VisitReasons") {
       sheet.appendRow(["السبب"]);
     } else if (name === "Visits") {
-      // ٢١ عموداً — الترتيب مربوط بأرقام الأعمدة في startVisit و closeVisit،
-      // فلا تُدرج عموداً في الوسط ولا تُعِد ترتيبها.
+      // ٢٤ عموداً — الترتيب مربوط بأرقام الأعمدة في startVisit و closeVisit
+      // و cancelVisit، فلا تُدرج عموداً في الوسط ولا تُعِد ترتيبها.
       sheet.appendRow([
         "تاريخ السجل", "معرّف الزيارة", "اسم الموظف", "الرقم التسلسلي", "الوظيفة",
         "كود التوكيل", "اسم التوكيل", "كود العميل", "اسم العميل",
+        "كود المندوب", "اسم المندوب",
         "وقت الفتح", "إحداثيات الفتح", "وقت الإغلاق", "إحداثيات الإغلاق", "مدة الزيارة (دقيقة)",
         "سبب تجاوز الائتمان", "المديونية الفعلية", "أيام التجاوز", "موعد السداد",
+        "ملاحظات الموظف",
         "إجمالي المديونية وقت الزيارة", "الأوفر ديو وقت الزيارة", "الحالة"
       ]);
     }

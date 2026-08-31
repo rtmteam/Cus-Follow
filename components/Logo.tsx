@@ -65,7 +65,7 @@ const Logo: React.FC<LogoProps> = ({ size = 40, tone = 'dark', showSub = true, c
             color: tone === 'dark' ? 'var(--on-dark-2)' : 'var(--tx-3)'
           }}
         >
-          نظام الحضور والانصراف
+          Cus Follow · متابعة العملاء
         </div>
       )}
     </div>

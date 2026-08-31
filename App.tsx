@@ -568,7 +568,7 @@ const App: React.FC = () => {
                 )}
               </div>
               <p className="ut-header__sub text-[11px] mt-1">
-                {currentUser ? currentUser.fullName : 'نظام الحضور والانصراف'}
+                {currentUser ? currentUser.fullName : 'Cus Follow · متابعة العملاء'}
               </p>
             </div>
           </div>
@@ -826,7 +826,7 @@ const App: React.FC = () => {
           <h2 className="text-2xl font-black text-red-500 mb-2">تم حظر فتح التطبيق</h2>
           <div className="bg-red-950/50 border border-red-800/60 p-4 rounded-2xl max-w-md text-xs font-bold leading-relaxed text-red-200 mb-6">
             <p className="mb-2">⚠️ تم اكتشاف تفعيل "وضع المطور" (Developer Options) أو "تصحيح USB" على هاتف الأندرويد.</p>
-            <p>لدواعي أمان النظام ومنع التلاعب بالحضور والانصراف، يتوجب عليك إيقاف وضع المطور أولاً لتتمكن من استخدام التطبيق.</p>
+            <p>لدواعي أمان النظام ومنع التلاعب بمواقع الزيارات، يتوجب عليك إيقاف وضع المطور أولاً لتتمكن من استخدام التطبيق.</p>
           </div>
           <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl max-w-md text-right text-xs space-y-2 text-slate-300 mb-6">
             <div className="font-black text-white border-b border-slate-800 pb-2 flex items-center gap-2">

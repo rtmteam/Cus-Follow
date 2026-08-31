@@ -31,7 +31,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   reportAccounts = [], setReportAccounts, visitPlans, setVisitPlans, customers, setCustomers,
   onRefresh, isSyncing, logAction
 }) => {
-  const [activeTab, setActiveTab] = useState<'branches' | 'jobs' | 'users' | 'customers' | 'report-access' | 'reports' | 'holidays' | 'settings'>('branches');
+  const [activeTab, setActiveTab] = useState<'branches' | 'jobs' | 'users' | 'customers' | 'report-access' | 'reports' | 'settings'>('branches');
   const [newBranch, setNewBranch] = useState<Partial<Branch>>({ code: '', name: '', latitude: 0, longitude: 0, radius: 100 });
   const [newJobTitle, setNewJobTitle] = useState('');
   const [newHoliday, setNewHoliday] = useState('');
@@ -99,17 +99,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [selectedJobsForAcc, setSelectedJobsForAcc] = useState<string[]>([]);
   const [selectedUsersForAcc, setSelectedUsersForAcc] = useState<string[]>([]); // New state for selected employees
   
-  const [newPlanUserId, setNewPlanUserId] = useState('');
-  const [newPlanBranchId, setNewPlanBranchId] = useState('');
-  const [newPlanDate, setNewPlanDate] = useState('');
 
   const [showPass, setShowPass] = useState<string | null>(null);
   const [editingReportId, setEditingReportId] = useState<string | null>(null);
   const [editReportData, setEditReportData] = useState<Partial<ReportAccount>>({});
   const [editingBranchId, setEditingBranchId] = useState<string | null>(null);
   const [editBranchData, setEditBranchData] = useState<Partial<Branch>>({});
-  const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
-  const [editPlanData, setEditPlanData] = useState<Partial<VisitPlan>>({});
   const [syncUrl, setSyncUrl] = useState(config.syncUrl || '');
   
   // State for Branch Bulk Delete
@@ -119,14 +114,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const jobFileInputRef = useRef<HTMLInputElement>(null);
   const userFileInputRef = useRef<HTMLInputElement>(null);
-  const planFileInputRef = useRef<HTMLInputElement>(null);
   const customerFileInputRef = useRef<HTMLInputElement>(null);
 
   // ---------- العملاء ----------
-  const [newCustomer, setNewCustomer] = useState<Partial<Customer>>({
-    code: '', name: '', agencyCode: '', agencyName: '',
+  const emptyCustomer: Partial<Customer> = {
+    code: '', name: '', repCode: '', repName: '', agencyCode: '', agencyName: '',
     totalDebt: 0, overdueDebt: 0, latitude: 0, longitude: 0
-  });
+  };
+  const [newCustomer, setNewCustomer] = useState<Partial<Customer>>(emptyCustomer);
   const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null);
   const [editCustomerData, setEditCustomerData] = useState<Partial<Customer>>({});
   const [customerSearch, setCustomerSearch] = useState('');
@@ -136,31 +131,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     { id: 'jobs', label: 'الوظائف', icon: Briefcase },
     { id: 'users', label: 'الموظفون', icon: Users },
     { id: 'customers', label: 'العملاء', icon: Store },
-    { id: 'holidays', label: 'الإجازات', icon: Calendar },
     { id: 'report-access', label: 'صلاحيات التقارير', icon: Key },
     { id: 'reports', label: 'استعراض التقارير', icon: FileSpreadsheet },
     { id: 'settings', label: 'الإعدادات', icon: Monitor }
   ] as const;
 
   // وظيفة لتنسيق الوقت للعرض (AM/PM)
-  const formatTimeDisplay = (timeStr: string | undefined) => {
-    if (!timeStr) return '--:--';
-    if (timeStr.includes('GMT') || timeStr.includes('1899')) {
-      try {
-        const d = new Date(timeStr);
-        if (!isNaN(d.getTime())) {
-          return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-        }
-      } catch(e) {}
-    }
-    if (/^\d{2}:\d{2}$/.test(timeStr)) {
-      const [h, m] = timeStr.split(':').map(Number);
-      const suffix = h >= 12 ? 'PM' : 'AM';
-      const displayH = h % 12 || 12;
-      return `${displayH.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')} ${suffix}`;
-    }
-    return timeStr;
-  };
 
   const normalizeToTimeInput = (timeStr: string | undefined): string => {
     if (!timeStr) return "09:00";
@@ -261,7 +237,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const inputClasses = "px-4 py-3 rounded-xl border border-slate-600 bg-slate-900 text-white font-bold outline-none focus:border-blue-500 w-full transition-all";
 
-  const downloadTemplate = (type: 'branches' | 'jobs' | 'users' | 'plans' | 'customers') => {
+  const downloadTemplate = (type: 'branches' | 'jobs' | 'users' | 'customers') => {
     let data: any[] = [];
     let fileName = "";
 
@@ -271,6 +247,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         {
           "كود العميل": "C1001",
           "اسم العميل": "سوبر ماركت النور",
+          "كود المندوب": "R-05",
+          "اسم المندوب": "أحمد سعيد",
           "كود التوكيل": "AG-01",
           "اسم التوكيل": "توكيل سموحة",
           "إجمالي المديونية": 154300,
@@ -282,6 +260,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         {
           "كود العميل": "C1002",
           "اسم العميل": "بقالة الأمانة",
+          "كود المندوب": "R-05",
+          "اسم المندوب": "أحمد سعيد",
           "كود التوكيل": "AG-01",
           "اسم التوكيل": "توكيل سموحة",
           "إجمالي المديونية": 9800,
@@ -309,20 +289,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         "الاسم بالكامل": "محمد احمد",
         "الرقم القومي": "29010101234567",
         "كلمة المرور": "123456",
-        "الوظيفة": "مهندس",
-        "الفرع الافتراضي": "الفرع الرئيسي",
-        "موعد الحضور": "09:00",
-        "موعد الانصراف": "17:00",
+        "الوظيفة": "مندوب تحصيل",
+        "الفرع الافتراضي": "AG-01",
         "عدد الاجهزة": 1
       }];
       fileName = "template_users.xlsx";
-    } else if (type === 'plans') {
-      data = [{
-        "الرقم التسلسلي للموظف": "2024001",
-        "اسم الفرع": "فرع المعادي",
-        "التاريخ": "2026-03-30"
-      }];
-      fileName = "template_plans.xlsx";
     }
     
     const ws = XLSX.utils.json_to_sheet(data);
@@ -331,7 +302,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     XLSX.writeFile(wb, fileName);
   };
 
-  const handleExcelImport = (e: React.ChangeEvent<HTMLInputElement>, type: 'branches' | 'jobs' | 'users' | 'plans' | 'customers') => {
+  const handleExcelImport = (e: React.ChangeEvent<HTMLInputElement>, type: 'branches' | 'jobs' | 'users' | 'customers') => {
     const file = e.target.files?.[0]; if (!file) return;
     const reader = new FileReader(); reader.onload = (evt) => {
       try {
@@ -364,6 +335,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
               id: code,
               code,
               name,
+              repCode:     pick(item, ["كود المندوب", "Rep Code", "repCode"]).toString().trim(),
+              repName:     pick(item, ["اسم المندوب", "Rep Name", "repName"]).toString().trim(),
               agencyCode:  pick(item, ["كود التوكيل", "Agency Code", "agencyCode"]).toString().trim(),
               agencyName:  pick(item, ["اسم التوكيل", "Agency Name", "agencyName"]).toString().trim(),
               totalDebt:   num(pick(item, ["إجمالي المديونية", "اجمالي المديونية", "Total Debt", "totalDebt"])),
@@ -406,48 +379,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         } else if (type === 'jobs') { 
           setJobs(prev => [...prev, ...data.map((item: any) => ({ id: Math.random().toString(36).substr(2, 9), title: item["اسم الوظيفة"] || 'موظف', canVisitMultipleBranches: item["زيارة فروع متعددة"] === "نعم" }))]); 
           logAction('استيراد وظائف', `تم استيراد ${data.length} وظيفة من ملف إكسل`);
-        } else if (type === 'plans') {
-          const newPlans = data.map((item: any) => {
-            const serial = (item["الرقم التسلسلي للموظف"] || "").toString().trim();
-            const user = allUsers.find(u => u.serialNumber === serial || u.id === serial);
-            const branchName = (item["اسم الفرع"] || "").toString().trim();
-            const isHoliday = branchName.toLowerCase() === 'holiday';
-            const branch = branches.find(b => b.name === branchName);
-            
-            let dateVal = (item["التاريخ"] || "").toString().trim();
-            // Normalize date to YYYY-MM-DD
-            if (dateVal) {
-              const d = new Date(dateVal);
-              if (!isNaN(d.getTime())) {
-                const year = d.getFullYear();
-                const month = String(d.getMonth() + 1).padStart(2, '0');
-                const day = String(d.getDate()).padStart(2, '0');
-                dateVal = `${year}-${month}-${day}`;
-              }
-            } else {
-              const d = new Date();
-              const year = d.getFullYear();
-              const month = String(d.getMonth() + 1).padStart(2, '0');
-              const day = String(d.getDate()).padStart(2, '0');
-              dateVal = `${year}-${month}-${day}`;
-            }
-
-            if (user && (branch || isHoliday)) {
-              return {
-                id: Math.random().toString(36).substr(2, 9),
-                userId: user.id,
-                userName: user.fullName,
-                userSerial: user.serialNumber,
-                branchId: branch ? branch.id : 'holiday',
-                branchName: branch ? branch.name : 'Holiday',
-                date: dateVal
-              };
-            }
-            return null;
-          }).filter(p => p !== null) as VisitPlan[];
-          setVisitPlans(prev => [...prev, ...newPlans]);
-          logAction('استيراد خطط زيارات', `تم استيراد ${newPlans.length} خطة زيارة`);
-          alert(`تم استيراد ${newPlans.length} خطة زيارة بنجاح. يرجى النقر على 'حفظ في السحابة' لتأكيد التغييرات.`);
         } else if (type === 'users') {
           const existingNids = new Set(allUsers.map(u => u.nationalId));
           let duplicateCount = 0;
@@ -500,46 +431,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }
       if(e.target) e.target.value = '';
     }; reader.readAsBinaryString(file);
-  };
-
-  const addManualPlan = () => {
-    if (!newPlanUserId || !newPlanBranchId || !newPlanDate) return alert("يرجى اختيار الموظف والفرع والتاريخ");
-    const user = allUsers.find(u => u.id === newPlanUserId);
-    const branch = branches.find(b => b.id === newPlanBranchId);
-    
-    const newPlan: VisitPlan = {
-      id: Math.random().toString(36).substr(2, 9),
-      userId: newPlanUserId,
-      userName: user?.fullName || 'N/A',
-      userSerial: user?.serialNumber || 'N/A',
-      branchId: newPlanBranchId,
-      branchName: newPlanBranchId === 'holiday' ? 'Holiday' : (branch?.name || 'N/A'),
-      date: newPlanDate
-    };
-
-    setVisitPlans(prev => [newPlan, ...prev]);
-    logAction('إضافة زيارة يدوية', `الموظف: ${newPlan.userName}, الفرع: ${newPlan.branchName}, التاريخ: ${newPlanDate}`);
-    setNewPlanUserId('');
-    setNewPlanBranchId('');
-    setNewPlanDate('');
-    alert("تم إضافة الزيارة بنجاح. يرجى النقر على 'حفظ في السحابة' لتأكيد التغييرات.");
-  };
-
-  const saveEditPlan = (id: string) => {
-    const user = allUsers.find(u => u.id === editPlanData.userId);
-    const branch = branches.find(b => b.id === editPlanData.branchId);
-    
-    setVisitPlans(visitPlans.map(p => p.id === id ? {
-      ...p,
-      ...editPlanData,
-      userName: user?.fullName || p.userName,
-      userSerial: user?.serialNumber || p.userSerial,
-      branchName: editPlanData.branchId === 'holiday' ? 'Holiday' : (branch?.name || p.branchName)
-    } : p));
-    
-    setEditingPlanId(null);
-    setEditPlanData({});
-    logAction('تعديل خطة زيارة', `المعرف: ${id}`);
   };
 
   const saveEditBranch = (id: string) => { 
@@ -611,7 +502,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx, .xls" onChange={(e) => handleExcelImport(e, 'branches')} />
       <input type="file" ref={jobFileInputRef} className="hidden" accept=".xlsx, .xls" onChange={(e) => handleExcelImport(e, 'jobs')} />
       <input type="file" ref={userFileInputRef} className="hidden" accept=".xlsx, .xls" onChange={(e) => handleExcelImport(e, 'users')} />
-      <input type="file" ref={planFileInputRef} className="hidden" accept=".xlsx, .xls" onChange={(e) => handleExcelImport(e, 'plans')} />
       <input type="file" ref={customerFileInputRef} className="hidden" accept=".xlsx, .xls" onChange={(e) => handleExcelImport(e, 'customers')} />
 
       <div className="admin-shell admin-shell--edge">
@@ -686,9 +576,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <tr className="border-b border-slate-700 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">
                       <th className="py-4 px-2 text-right">الموظف والوظيفة</th>
                       <th className="py-4 px-2">الرقم القومي</th>
-                      <th className="py-4 px-2">الفرع الافتراضي</th>
-                      <th className="py-4 px-2">الحضور (Default)</th>
-                      <th className="py-4 px-2">الانصراف (Default)</th>
+                      <th className="py-4 px-2">التوكيل</th>
                       <th className="py-4 px-2">الأجهزة المرتبطة</th>
                       <th className="py-4 px-2">إجراءات</th>
                     </tr>
@@ -721,27 +609,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <input className="bg-slate-900 border border-blue-500 rounded px-2 py-1 text-xs w-full text-center text-white" value={editUserData.nationalId || ''} onChange={e => setEditUserData({...editUserData, nationalId: e.target.value})} />
                         ) : user.nationalId}
                      </td>
-                     <td data-label="الفرع الافتراضي" className="py-4 px-2">
+                     <td data-label="التوكيل" className="py-4 px-2">
                         {editingUserId === user.id ? (
                           <select className="bg-slate-900 border border-blue-500 rounded px-2 py-1 text-[10px] w-full text-white" value={editUserData.defaultBranchId || ''} onChange={e => setEditUserData({...editUserData, defaultBranchId: e.target.value})}>
                             {branches.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
                           </select>
                         ) : (
                           <span className="text-xs text-slate-300 font-bold">{user.defaultBranchId || user.defaultBranch || user.assignedBranch || user.branch || 'غير محدد'}</span>
-                        )}
-                     </td>
-                     <td data-label="الحضور (Default)" className="py-4 px-2">
-                        {editingUserId === user.id ? (
-                          <input type="time" className="bg-slate-900 border border-blue-500 rounded px-2 py-1 text-xs w-full text-center text-white" value={editUserData.checkInTime || ''} onChange={e => setEditUserData({...editUserData, checkInTime: e.target.value})} />
-                        ) : (
-                          <div className="flex items-center justify-center gap-1 text-green-400 font-bold text-xs"><Clock size={12}/> {formatTimeDisplay(user.checkInTime || '09:00')}</div>
-                        )}
-                     </td>
-                     <td data-label="الانصراف (Default)" className="py-4 px-2">
-                        {editingUserId === user.id ? (
-                          <input type="time" className="bg-slate-900 border border-blue-500 rounded px-2 py-1 text-xs w-full text-center text-white" value={editUserData.checkOutTime || ''} onChange={e => setEditUserData({...editUserData, checkOutTime: e.target.value})} />
-                        ) : (
-                          <div className="flex items-center justify-center gap-1 text-orange-400 font-bold text-xs"><Clock size={12}/> {formatTimeDisplay(user.checkOutTime || '17:00')}</div>
                         )}
                      </td>
                      <td data-label="الأجهزة المرتبطة" className="py-4 px-2">
@@ -1074,6 +948,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
                   <input type="text" placeholder="كود العميل" className="bg-slate-900 border border-slate-700 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-mono outline-none text-white" value={newCustomer.code || ''} onChange={e => setNewCustomer({...newCustomer, code: e.target.value})} />
                   <input type="text" placeholder="اسم العميل" className="bg-slate-900 border border-slate-700 focus:border-blue-500 rounded-xl px-3 py-2 text-xs outline-none text-white col-span-2 sm:col-span-1" value={newCustomer.name || ''} onChange={e => setNewCustomer({...newCustomer, name: e.target.value})} />
+                  <input type="text" placeholder="كود المندوب" className="bg-slate-900 border border-slate-700 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-mono outline-none text-white" value={newCustomer.repCode || ''} onChange={e => setNewCustomer({...newCustomer, repCode: e.target.value})} />
+                  <input type="text" placeholder="اسم المندوب" className="bg-slate-900 border border-slate-700 focus:border-blue-500 rounded-xl px-3 py-2 text-xs outline-none text-white" value={newCustomer.repName || ''} onChange={e => setNewCustomer({...newCustomer, repName: e.target.value})} />
                   <input type="text" placeholder="كود التوكيل" className="bg-slate-900 border border-slate-700 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-mono outline-none text-white" value={newCustomer.agencyCode || ''} onChange={e => setNewCustomer({...newCustomer, agencyCode: e.target.value})} />
                   <input type="text" placeholder="اسم التوكيل" className="bg-slate-900 border border-slate-700 focus:border-blue-500 rounded-xl px-3 py-2 text-xs outline-none text-white" value={newCustomer.agencyName || ''} onChange={e => setNewCustomer({...newCustomer, agencyName: e.target.value})} />
                   <input type="number" placeholder="إجمالي المديونية" className="bg-slate-900 border border-slate-700 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-mono outline-none text-white" value={newCustomer.totalDebt || ''} onChange={e => setNewCustomer({...newCustomer, totalDebt: parseFloat(e.target.value) || 0})} />
@@ -1089,7 +965,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       if (customers.some(c => c.code === code)) { alert(`الكود ${code} مستعمل بالفعل لعميل آخر.`); return; }
                       setCustomers([...customers, { ...newCustomer, id: code, code, name } as Customer]);
                       logAction('إضافة عميل', `العميل: ${name} (${code})`);
-                      setNewCustomer({ code: '', name: '', agencyCode: '', agencyName: '', totalDebt: 0, overdueDebt: 0, latitude: 0, longitude: 0 });
+                      setNewCustomer(emptyCustomer);
                     }}
                     className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-black py-2 px-4 text-xs flex items-center justify-center gap-1.5 transition-all col-span-2 sm:col-span-1 shadow-md"
                   >
@@ -1103,7 +979,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 type="text"
                 value={customerSearch}
                 onChange={e => setCustomerSearch(e.target.value)}
-                placeholder="ابحث بكود العميل أو باسمه أو بالتوكيل…"
+                placeholder="ابحث بكود العميل أو باسمه أو بالمندوب أو بالتوكيل…"
                 className="w-full bg-slate-900 border border-slate-700 focus:border-blue-500 rounded-xl pr-10 pl-4 py-2.5 text-xs outline-none text-white"
               />
               <Search size={15} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
@@ -1113,6 +989,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <thead>
                   <tr className="border-b border-slate-700 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">
                     <th className="py-4 px-2 text-right">العميل</th>
+                    <th className="py-4 px-2">المندوب</th>
                     <th className="py-4 px-2">التوكيل</th>
                     <th className="py-4 px-2">إجمالي المديونية</th>
                     <th className="py-4 px-2">الأوفر ديو</th>
@@ -1128,6 +1005,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       ? customers.filter(c =>
                           c.code.toLowerCase().includes(q) ||
                           c.name.toLowerCase().includes(q) ||
+                          (c.repCode || '').toLowerCase().includes(q) ||
+                          (c.repName || '').toLowerCase().includes(q) ||
                           c.agencyCode.toLowerCase().includes(q) ||
                           c.agencyName.toLowerCase().includes(q))
                       : customers;
@@ -1135,7 +1014,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     if (shown.length === 0) {
                       return (
                         <tr>
-                          <td colSpan={7} className="py-12 text-center">
+                          <td colSpan={8} className="py-12 text-center">
                             <Store size={36} className="mx-auto opacity-20 mb-3" />
                             <div className="text-sm font-bold text-slate-300">
                               {customers.length === 0 ? 'لا يوجد عملاء بعد' : 'لا نتائج لبحثك'}
@@ -1162,6 +1041,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               <div className="flex flex-col">
                                 <span className="font-bold text-sm text-white">{c.name}</span>
                                 <span className="text-amber-400 text-xs font-black font-mono">{c.code}</span>
+                              </div>
+                            )}
+                          </td>
+                          <td data-label="المندوب" className="py-4 px-2">
+                            {isEditing ? (
+                              <div className="flex gap-1">
+                                <input className="bg-slate-900 border border-blue-500 rounded px-2 py-1 text-xs w-full text-white font-mono" placeholder="كود" value={editCustomerData.repCode || ''} onChange={e => setEditCustomerData({...editCustomerData, repCode: e.target.value})} />
+                                <input className="bg-slate-900 border border-blue-500 rounded px-2 py-1 text-xs w-full text-white" placeholder="اسم" value={editCustomerData.repName || ''} onChange={e => setEditCustomerData({...editCustomerData, repName: e.target.value})} />
+                              </div>
+                            ) : (
+                              <div className="flex flex-col">
+                                <span className="text-xs text-slate-300 font-bold">{c.repName || '—'}</span>
+                                <span className="text-[11px] text-slate-500 font-mono">{c.repCode}</span>
                               </div>
                             )}
                           </td>
@@ -1242,31 +1134,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   })()}
                 </tbody>
               </table>
-            </div>
-          </div>
-        )}
-        {activeTab === 'holidays' && (
-          <div className="space-y-4 md:space-y-6">
-            <div className="bg-slate-900/50 p-3 md:p-4 rounded-2xl border border-slate-700 flex items-center gap-2.5">
-              <Calendar size={18} className="text-blue-400 shrink-0" />
-              <h3 className="text-xs md:text-sm font-black text-white uppercase tracking-tighter">إجازات الموظفين</h3>
-            </div>
-
-            <div className="bg-slate-900/50 p-3.5 md:p-4 rounded-2xl border border-slate-700 flex gap-2">
-               <input type="date" className="bg-slate-900 border border-slate-700 focus:border-blue-500 rounded-xl px-3 py-2 text-xs outline-none text-white font-mono flex-1" value={newHoliday} onChange={e => setNewHoliday(e.target.value)} />
-               <button onClick={() => { if(newHoliday && !config.holidays?.includes(newHoliday)) { const newConfig = {...config, holidays: [...(config.holidays||[]), newHoliday]}; setConfig(newConfig); const { adminPassword, ...configToSave } = newConfig; localStorage.setItem('attendance_config', JSON.stringify(configToSave)); logAction('إضافة إجازة رسمية', `التاريخ: ${newHoliday}`); setNewHoliday(''); } }} className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl px-4 py-2 text-xs font-black flex items-center gap-1.5 transition-all shrink-0"><Plus size={16}/> إضافة إجازة</button>
-            </div>
-
-            <div className="flex justify-between items-center">
-               <h4 className="text-xs font-black text-blue-400 uppercase tracking-widest flex items-center gap-1.5"><Calendar size={16}/> الإجازات الرسمية المسجلة ({(config.holidays || []).length})</h4>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-               {(config.holidays || []).sort().map(h => (
-                 <div key={h} className="p-4 bg-slate-900 rounded-2xl border border-slate-700 flex justify-between items-center hover:border-blue-500 transition-all">
-                   <span className="text-xs font-bold font-mono text-blue-400">{h}</span>
-                   <button onClick={() => { if(confirm('حذف الإجازة؟')) { const newConfig = {...config, holidays: config.holidays!.filter(x => x !== h)}; setConfig(newConfig); const { adminPassword, ...configToSave } = newConfig; localStorage.setItem('attendance_config', JSON.stringify(configToSave)); logAction('حذف إجازة رسمية', `التاريخ: ${h}`); } }} className="text-slate-600 hover:text-red-500"><Trash2 size={14}/></button>
-                 </div>
-               ))}
             </div>
           </div>
         )}
@@ -1435,7 +1302,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="flex items-center gap-2.5">
                 <FileSpreadsheet size={20} className="text-emerald-400 shrink-0" />
                 <div>
-                  <h3 className="text-xs md:text-sm font-black text-white uppercase tracking-tighter">تقارير الحضور والانصراف المباشرة</h3>
+                  <h3 className="text-xs md:text-sm font-black text-white">التقارير المباشرة</h3>
                   <p className="text-[10px] text-slate-400 font-bold">عرض وتصفية وتصدير البيانات من نفس الشاشة</p>
                 </div>
               </div>
