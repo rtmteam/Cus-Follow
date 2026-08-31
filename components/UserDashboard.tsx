@@ -88,8 +88,8 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
     if (!myAgency) return false;
     const target = myAgency.toLowerCase();
     return (
-      c.agencyCode.trim().toLowerCase() === target ||
-      c.agencyName.trim().toLowerCase() === target
+      String(c.agencyCode ?? '').trim().toLowerCase() === target ||
+      String(c.agencyName ?? '').trim().toLowerCase() === target
     );
   };
 
@@ -112,7 +112,6 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
   /** القائمة مغلقة حتى يضغطها الموظف — الشاشة تبدأ نظيفة والزر أقرب لإبهامه */
   const [pickerOpen, setPickerOpen] = useState(false);
-  const pickerRef = useRef<HTMLDivElement | null>(null);
   const [isWorking, setIsWorking] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error' | 'none'; msg: string }>({ type: 'none', msg: '' });
   const [currentTime, setCurrentTime] = useState(getEgyptTime());
@@ -212,17 +211,8 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
     }
   }, [openVisits, lastUpdated, user.serialNumber]);
 
-  /** إغلاق القائمة عند الضغط خارجها — سلوك القوائم المنسدلة المتوقّع */
-  useEffect(() => {
-    if (!pickerOpen) return;
-    const onDocClick = (e: MouseEvent) => {
-      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
-        setPickerOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', onDocClick);
-    return () => document.removeEventListener('mousedown', onDocClick);
-  }, [pickerOpen]);
+  /* لا إغلاق بالضغط خارج القائمة: صارت داخل التخطيط لا فوقه، ولمس الشاشة
+     للتمرير على الهاتف كان يُغلقها في منتصف البحث. تُغلق بزرّها أو باختيار عميل. */
 
   /**
    * نتائج البحث.
@@ -233,20 +223,24 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
    */
   const CUSTOMERS_BEFORE_SEARCH = 6;
 
+  // كل المقارنات عبر String(...): خانة فارغة في الشيت تصل undefined،
+  // و‏.toLowerCase() عليها كان يرمي استثناءً يُفرّغ الشاشة بالكامل.
+  const norm = (v: any) => String(v == null ? '' : v).toLowerCase();
+
   const matchedCustomers = (() => {
     const q = search.trim().toLowerCase();
     if (!q) return myCustomers;
     return myCustomers.filter((c) =>
-      c.code.toLowerCase().includes(q) ||
-      c.name.toLowerCase().includes(q) ||
-      (c.repCode || '').toLowerCase().includes(q) ||
-      (c.repName || '').toLowerCase().includes(q)
+      norm(c.code).includes(q) ||
+      norm(c.name).includes(q) ||
+      norm(c.repCode).includes(q) ||
+      norm(c.repName).includes(q)
     );
   })();
 
   const isSearching = search.trim() !== '';
   const visibleCustomers = isSearching
-    ? matchedCustomers.slice(0, 30)
+    ? matchedCustomers.slice(0, 50)
     : matchedCustomers.slice(0, CUSTOMERS_BEFORE_SEARCH);
   const hiddenCount = matchedCustomers.length - visibleCustomers.length;
 
@@ -949,8 +943,11 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                     ) : null}
                   </div>
 
-                  {/* ===== قائمة منسدلة: مغلقة حتى يضغطها الموظف ===== */}
-                  <div className="relative" ref={pickerRef}>
+                  {/* ===== قائمة منسدلة: مغلقة حتى يضغطها الموظف =====
+                      تنسدل داخل التخطيط لا فوقه: البطاقة الحاوية عليها
+                      overflow-hidden (لازمة لتدوير حوافها)، وطبقة عائمة
+                      بـ absolute كانت تُقصّ عند حافتها فلا يظهر إلا أول صفّ. */}
+                  <div>
                     <button
                       type="button"
                       onClick={() => {
@@ -982,7 +979,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                     </button>
 
                     {pickerOpen && (
-                      <div className="absolute z-40 mt-2 w-full bg-slate-900 border border-slate-600 rounded-2xl shadow-2xl overflow-hidden">
+                      <div className="mt-2 w-full bg-slate-900 border border-slate-600 rounded-2xl shadow-2xl">
                         <div className="relative p-2.5 border-b border-slate-700">
                           <input
                             type="text"
@@ -995,7 +992,25 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                           <Search size={16} className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
                         </div>
 
-                        <div className="max-h-64 overflow-y-auto p-2 space-y-1.5">
+                        {/* عدّاد النتائج — يؤكد للموظف أن البحث يعمل فعلاً */}
+                        <div className="px-3.5 py-2 border-b border-slate-800 flex items-center justify-between gap-2">
+                          <span className="text-[11px] font-bold text-slate-400">
+                            {isSearching
+                              ? `${matchedCustomers.length} نتيجة`
+                              : `${myCustomers.length} عميل في توكيلك`}
+                          </span>
+                          {isSearching && (
+                            <button
+                              type="button"
+                              onClick={() => setSearch('')}
+                              className="text-[11px] font-black text-slate-400 px-2 py-1 rounded-md"
+                            >
+                              مسح البحث
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="max-h-80 overflow-y-auto p-2 space-y-1.5">
                           {myCustomers.length === 0 ? (
                             <div className="text-center py-8 px-4">
                               <Store size={32} className="mx-auto opacity-20 mb-3" />
@@ -1061,6 +1076,14 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                             </>
                           )}
                         </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setPickerOpen(false)}
+                          className="w-full py-3 min-h-[44px] text-xs font-black text-slate-400 border-t border-slate-700"
+                        >
+                          إغلاق القائمة
+                        </button>
                       </div>
                     )}
                   </div>
