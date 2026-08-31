@@ -732,18 +732,25 @@ function getDefaultCustomerRadius(ss) {
 }
 
 /**
- * قراءة شيت العملاء.
- * الأعمدة: كود · اسم · كود التوكيل · اسم التوكيل · إجمالي المديونية ·
- *          الأوفر ديو · خط العرض · خط الطول · النطاق
+ * قراءة شيت العملاء بلا تكرار.
+ * الأعمدة: كود العميل · اسمه · كود المندوب · اسمه · كود التوكيل · اسمه ·
+ *          إجمالي المديونية · الأوفر ديو · خط العرض · خط الطول · النطاق
  */
 function readCustomers(ss) {
   var sheet = getOrCreateSheet(ss, "Customers");
   var rows = sheet.getDataRange().getValues();
   var list = [];
+  // إزالة التكرار بكود العميل: صفّان بنفس الكود (استيراد فوق استيراد، أو
+  // كود بمسافة زائدة) كانا يُخرجان العميل نفسه مرّتين في قائمة الموظف.
+  // الصفّ الأحدث يغلب لأنه الأسفل في الشيت.
+  var seen = {};
   for (var i = 1; i < rows.length; i++) {
     var code = rows[i][0] ? rows[i][0].toString().trim() : "";
     if (code === "") continue; // صفّ فارغ في وسط الشيت لا يُنشئ عميلاً وهمياً
+    var key = code.toLowerCase();
     var radius = parseInt(rows[i][10]);
+    if (seen[key] !== undefined) list[seen[key]] = null; // يُسقَط أدناه
+    seen[key] = list.length;
     list.push({
       id: code,
       code: code,
@@ -759,7 +766,13 @@ function readCustomers(ss) {
       radius: (!isNaN(radius) && radius > 0) ? radius : null
     });
   }
-  return list;
+
+  // إسقاط الصفوف التي غلبها صفّ أحدث بنفس الكود
+  var unique = [];
+  for (var u = 0; u < list.length; u++) {
+    if (list[u] !== null) unique.push(list[u]);
+  }
+  return unique;
 }
 
 /** قائمة أسباب تجاوز الائتمان الجاهزة — عمود واحد في شيت VisitReasons */

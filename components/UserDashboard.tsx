@@ -93,7 +93,26 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
     );
   };
 
-  const myCustomers = customers.filter(belongsToMyAgency);
+  /**
+   * عملاء توكيلي، بلا تكرار.
+   *
+   * كود العميل هو المفتاح. التكرار يقع حين يحمل الشيت صفّين بنفس الكود
+   * (استيراد فوق استيراد، أو كود بمسافة زائدة)، وكان يُخرج العميل نفسه
+   * مرّات في القائمة فيظنّ الموظف أنهم عملاء مختلفون. آخر صفّ يغلب لأنه
+   * الأحدث في الشيت.
+   */
+  const myCustomers = (() => {
+    const byCode = new Map<string, Customer>();
+    for (const c of customers) {
+      if (!belongsToMyAgency(c)) continue;
+      const key = String(c.code ?? '').trim().toLowerCase();
+      if (!key) continue; // عميل بلا كود لا يُعرض: لا يمكن إرساله للخادم
+      byCode.set(key, c);
+    }
+    return Array.from(byCode.values()).sort((a, b) =>
+      String(a.name ?? '').localeCompare(String(b.name ?? ''), 'ar')
+    );
+  })();
 
   // ---------- الموقع ----------
   const [liveLocation, setLiveLocation] = useState<{ lat: number; lng: number; accuracy: number; timestamp: number } | null>(null);
@@ -1020,10 +1039,23 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                               </div>
                             </div>
                           ) : matchedCustomers.length === 0 ? (
+                            /* لا نعرض أي عميل عند عدم التطابق — لا نتيجة أقرب
+                               ولا رجوع للقائمة كاملة. الفراغ هنا هو الجواب. */
                             <div className="text-center py-8 px-4">
                               <Search size={28} className="mx-auto opacity-20 mb-3" />
-                              <div className="text-sm font-bold text-slate-300">لا نتائج لبحثك</div>
-                              <div className="text-xs text-slate-500 mt-1">جرّب كود العميل، أو جزءاً من اسمه.</div>
+                              <div className="text-sm font-bold text-slate-300">
+                                لا يوجد عميل يطابق «{search.trim()}»
+                              </div>
+                              <div className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                                تأكد من الكود، أو ابحث بجزء من اسم العميل أو المندوب.
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setSearch('')}
+                                className="mt-3 text-xs font-black text-blue-400 px-4 py-2.5 rounded-lg border border-blue-800/50 bg-blue-950/30 min-h-[40px]"
+                              >
+                                عرض كل العملاء
+                              </button>
                             </div>
                           ) : (
                             <>

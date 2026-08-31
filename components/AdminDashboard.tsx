@@ -340,7 +340,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
             // الدمج بكود العميل: إعادة استيراد كشف محدّث من نظامك تُحدّث
             // المديونيات ولا تُنشئ نسخة ثانية من العميل نفسه.
-            const at = merged.findIndex(c => c.code === code);
+            // المقارنة بكود مُشذَّب وبلا حساسية لحالة الأحرف — «C100 » و«c100»
+            // كانا يمرّان كعميلين مختلفين فيتكرّر العميل نفسه في قائمة الموظف.
+            const key = code.trim().toLowerCase();
+            const at = merged.findIndex(c => String(c.code ?? '').trim().toLowerCase() === key);
             if (at >= 0) { merged[at] = { ...merged[at], ...record }; updated++; }
             else { merged.push(record); added++; }
           });
@@ -931,6 +934,46 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
               وعمود «النطاق» اختياري، ومن يتركه فارغاً يأخذ الافتراضي ({config.defaultCustomerRadius || 100} م).
             </div>
 
+            {/* تنبيه التكرار — أكواد مكرّرة تُخرج العميل نفسه مرّات في قائمة الموظف */}
+            {(() => {
+              const seen = new Set<string>();
+              const dups = new Set<string>();
+              customers.forEach(c => {
+                const k = String(c.code ?? '').trim().toLowerCase();
+                if (!k) return;
+                if (seen.has(k)) dups.add(k); else seen.add(k);
+              });
+              if (dups.size === 0) return null;
+              return (
+                <div className="bg-amber-950/30 border border-amber-800/50 rounded-2xl p-3.5 flex flex-wrap items-center justify-between gap-3">
+                  <div className="text-xs text-amber-200/90 font-bold leading-relaxed flex items-start gap-2">
+                    <AlertTriangle size={15} className="shrink-0 mt-0.5" />
+                    <span>
+                      يوجد {dups.size} كود عميل مكرّر. العميل المكرّر يظهر أكثر من مرة في قائمة الموظف.
+                      التنظيف يُبقي أحدث نسخة ويحذف ما قبلها.
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const byCode = new Map<string, Customer>();
+                      customers.forEach(c => {
+                        const k = String(c.code ?? '').trim().toLowerCase();
+                        if (k) byCode.set(k, c);
+                      });
+                      const cleaned = Array.from(byCode.values());
+                      const removed = customers.length - cleaned.length;
+                      setCustomers(cleaned);
+                      logAction('تنظيف عملاء مكرّرين', `حُذف ${removed} صفّاً مكرّراً`);
+                      alert(`حُذف ${removed} عميلاً مكرّراً.\n\nاضغط «حفظ السحابة» لتأكيد التغيير.`);
+                    }}
+                    className="flex items-center gap-1.5 px-4 py-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-black transition-all min-h-[40px] shrink-0"
+                  >
+                    <Trash2 size={13} /> تنظيف التكرار
+                  </button>
+                </div>
+              );
+            })()}
+
             <div className="bg-slate-900/50 p-3.5 md:p-4 rounded-2xl border border-slate-700 space-y-2.5">
                <h4 className="text-xs font-black text-blue-400 flex items-center gap-1.5"><Plus size={15}/> إضافة عميل يدوياً</h4>
                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
@@ -950,7 +993,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       const code = (newCustomer.code || '').trim();
                       const name = (newCustomer.name || '').trim();
                       if (!code || !name) { alert('كود العميل واسمه إلزاميان.'); return; }
-                      if (customers.some(c => c.code === code)) { alert(`الكود ${code} مستعمل بالفعل لعميل آخر.`); return; }
+                      const dupKey = code.toLowerCase();
+                      if (customers.some(c => String(c.code ?? '').trim().toLowerCase() === dupKey)) {
+                        alert(`الكود ${code} مستعمل بالفعل لعميل آخر.`); return;
+                      }
                       setCustomers([...customers, { ...newCustomer, id: code, code, name } as Customer]);
                       logAction('إضافة عميل', `العميل: ${name} (${code})`);
                       setNewCustomer(emptyCustomer);
