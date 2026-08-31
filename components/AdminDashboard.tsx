@@ -1,7 +1,7 @@
 
 import React, { useState, useRef } from 'react';
-import { Branch, AttendanceRecord, AppConfig, User, Job, ReportAccount, VisitPlan } from '../types';
-import { MapPin, Table, Trash2, Shield, CloudUpload, Briefcase, RotateCcw, Globe, Users, Plus, FileSpreadsheet, Download, Share2, Smartphone, RefreshCw, Edit2, Check, X, Unlink, Key, Lock, Eye, EyeOff, Clock, Monitor, UserCheck, Calendar, Navigation, ArrowUp, ArrowDown, GripVertical, KeyRound, Loader2 } from 'lucide-react';
+import { Branch, AttendanceRecord, AppConfig, User, Job, ReportAccount, VisitPlan, Customer } from '../types';
+import { MapPin, Table, Trash2, Shield, CloudUpload, Briefcase, RotateCcw, Globe, Users, Plus, FileSpreadsheet, Download, Share2, Smartphone, RefreshCw, Edit2, Check, X, Unlink, Key, Lock, Eye, EyeOff, Clock, Monitor, UserCheck, Calendar, Navigation, ArrowUp, ArrowDown, GripVertical, KeyRound, Loader2, Store, Search, Wallet, AlertTriangle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import ReportsView from './ReportsView';
 
@@ -19,6 +19,8 @@ interface AdminDashboardProps {
   setReportAccounts?: React.Dispatch<React.SetStateAction<ReportAccount[]>>;
   visitPlans: VisitPlan[];
   setVisitPlans: React.Dispatch<React.SetStateAction<VisitPlan[]>>;
+  customers: Customer[];
+  setCustomers: React.Dispatch<React.SetStateAction<Customer[]>>;
   onRefresh: () => void;
   isSyncing: boolean;
   logAction: (action: string, details?: string) => void;
@@ -26,9 +28,10 @@ interface AdminDashboardProps {
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ 
   branches, setBranches, jobs, setJobs, records, config, setConfig, allUsers, setAllUsers, 
-  reportAccounts = [], setReportAccounts, visitPlans, setVisitPlans, onRefresh, isSyncing, logAction
+  reportAccounts = [], setReportAccounts, visitPlans, setVisitPlans, customers, setCustomers,
+  onRefresh, isSyncing, logAction
 }) => {
-  const [activeTab, setActiveTab] = useState<'branches' | 'jobs' | 'users' | 'plans' | 'report-access' | 'reports' | 'holidays' | 'settings'>('branches');
+  const [activeTab, setActiveTab] = useState<'branches' | 'jobs' | 'users' | 'customers' | 'report-access' | 'reports' | 'holidays' | 'settings'>('branches');
   const [newBranch, setNewBranch] = useState<Partial<Branch>>({ code: '', name: '', latitude: 0, longitude: 0, radius: 100 });
   const [newJobTitle, setNewJobTitle] = useState('');
   const [newHoliday, setNewHoliday] = useState('');
@@ -117,12 +120,22 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const jobFileInputRef = useRef<HTMLInputElement>(null);
   const userFileInputRef = useRef<HTMLInputElement>(null);
   const planFileInputRef = useRef<HTMLInputElement>(null);
+  const customerFileInputRef = useRef<HTMLInputElement>(null);
+
+  // ---------- العملاء ----------
+  const [newCustomer, setNewCustomer] = useState<Partial<Customer>>({
+    code: '', name: '', agencyCode: '', agencyName: '',
+    totalDebt: 0, overdueDebt: 0, latitude: 0, longitude: 0
+  });
+  const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null);
+  const [editCustomerData, setEditCustomerData] = useState<Partial<Customer>>({});
+  const [customerSearch, setCustomerSearch] = useState('');
 
   const ADMIN_TABS = [
     { id: 'branches', label: 'الفروع', icon: MapPin },
     { id: 'jobs', label: 'الوظائف', icon: Briefcase },
     { id: 'users', label: 'الموظفون', icon: Users },
-    { id: 'plans', label: 'خطط الزيارات', icon: Navigation },
+    { id: 'customers', label: 'العملاء', icon: Store },
     { id: 'holidays', label: 'الإجازات', icon: Calendar },
     { id: 'report-access', label: 'صلاحيات التقارير', icon: Key },
     { id: 'reports', label: 'استعراض التقارير', icon: FileSpreadsheet },
@@ -191,6 +204,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         payload.visitPlans = visitPlans;
       }
 
+      if (!dataType || dataType === 'customers') {
+        payload.customers = customers;
+      }
+
+      if (config.defaultCustomerRadius) {
+        payload.customerRadius = config.defaultCustomerRadius;
+      }
+
       // بلا no-cors عمداً.
       // كان يعمي الاستجابة فتظهر رسالة النجاح مهما ردّ الخادم — وبعد إضافة
       // المصادقة على updateSystem صار الرفض ممكناً، فكان المسؤول يرى «تم
@@ -240,10 +261,43 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const inputClasses = "px-4 py-3 rounded-xl border border-slate-600 bg-slate-900 text-white font-bold outline-none focus:border-blue-500 w-full transition-all";
 
-  const downloadTemplate = (type: 'branches' | 'jobs' | 'users' | 'plans') => {
+  const downloadTemplate = (type: 'branches' | 'jobs' | 'users' | 'plans' | 'customers') => {
     let data: any[] = [];
     let fileName = "";
-    
+
+    if (type === 'customers') {
+      // صفّان: الأول مملوء بالكامل، والثاني يبيّن أن النطاق اختياري
+      data = [
+        {
+          "كود العميل": "C1001",
+          "اسم العميل": "سوبر ماركت النور",
+          "كود التوكيل": "AG-01",
+          "اسم التوكيل": "توكيل سموحة",
+          "إجمالي المديونية": 154300,
+          "المديونية الأوفر ديو": 42000,
+          "خط العرض": 31.200100,
+          "خط الطول": 29.918700,
+          "النطاق": 80
+        },
+        {
+          "كود العميل": "C1002",
+          "اسم العميل": "بقالة الأمانة",
+          "كود التوكيل": "AG-01",
+          "اسم التوكيل": "توكيل سموحة",
+          "إجمالي المديونية": 9800,
+          "المديونية الأوفر ديو": 0,
+          "خط العرض": 31.250000,
+          "خط الطول": 29.960000,
+          "النطاق": ""
+        }
+      ];
+      const wsC = XLSX.utils.json_to_sheet(data);
+      const wbC = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wbC, wsC, "Customers");
+      XLSX.writeFile(wbC, "template_customers.xlsx");
+      return;
+    }
+
     if (type === 'branches') {
       data = [{ "كود الفرع": "101", "اسم الفرع": "الفرع الرئيسي", "خط العرض": 30.05, "خط الطول": 31.23, "النطاق بالمتر": 100 }];
       fileName = "template_branches.xlsx";
@@ -277,13 +331,69 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     XLSX.writeFile(wb, fileName);
   };
 
-  const handleExcelImport = (e: React.ChangeEvent<HTMLInputElement>, type: 'branches' | 'jobs' | 'users' | 'plans') => {
+  const handleExcelImport = (e: React.ChangeEvent<HTMLInputElement>, type: 'branches' | 'jobs' | 'users' | 'plans' | 'customers') => {
     const file = e.target.files?.[0]; if (!file) return;
     const reader = new FileReader(); reader.onload = (evt) => {
       try {
         const bstr = evt.target?.result; const wb = XLSX.read(bstr, { type: 'binary' }); const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
-        
-        if (type === 'branches') { 
+
+        if (type === 'customers') {
+          // قراءة متسامحة: عناوين عربية أو إنجليزية، وفروق المسافات مُتجاهَلة
+          const pick = (item: any, keys: string[]) => {
+            for (const k of keys) {
+              const found = Object.keys(item).find(x => x.toString().trim() === k);
+              if (found !== undefined && item[found] !== undefined && item[found] !== '') return item[found];
+            }
+            return '';
+          };
+          const num = (v: any) => { const n = parseFloat(String(v).replace(/,/g, '')); return isNaN(n) ? 0 : n; };
+
+          let added = 0, updated = 0, skipped = 0;
+          const merged = [...customers];
+
+          data.forEach((item: any) => {
+            const code = pick(item, ["كود العميل", "الكود", "Customer Code", "code"]).toString().trim();
+            const name = pick(item, ["اسم العميل", "الاسم", "Customer Name", "name"]).toString().trim();
+            // صفّ بلا كود لا يُستورد: الكود هو مفتاح المطابقة والبحث
+            if (!code || !name) { skipped++; return; }
+
+            const rawRadius = pick(item, ["النطاق", "نطاق", "Radius", "radius"]);
+            const parsedRadius = parseInt(String(rawRadius));
+
+            const record: Customer = {
+              id: code,
+              code,
+              name,
+              agencyCode:  pick(item, ["كود التوكيل", "Agency Code", "agencyCode"]).toString().trim(),
+              agencyName:  pick(item, ["اسم التوكيل", "Agency Name", "agencyName"]).toString().trim(),
+              totalDebt:   num(pick(item, ["إجمالي المديونية", "اجمالي المديونية", "Total Debt", "totalDebt"])),
+              overdueDebt: num(pick(item, ["المديونية الأوفر ديو", "المديونية الاوفر ديو", "الأوفر ديو", "Overdue Debt", "overdueDebt"])),
+              latitude:    num(pick(item, ["خط العرض", "Latitude", "lat"])),
+              longitude:   num(pick(item, ["خط الطول", "Longitude", "lng"])),
+              radius: (!isNaN(parsedRadius) && parsedRadius > 0) ? parsedRadius : undefined
+            };
+
+            // الدمج بكود العميل: إعادة استيراد كشف محدّث من نظامك تُحدّث
+            // المديونيات ولا تُنشئ نسخة ثانية من العميل نفسه.
+            const at = merged.findIndex(c => c.code === code);
+            if (at >= 0) { merged[at] = { ...merged[at], ...record }; updated++; }
+            else { merged.push(record); added++; }
+          });
+
+          setCustomers(merged);
+          logAction('استيراد عملاء', `أُضيف ${added}، حُدِّث ${updated}، تُخطّي ${skipped}`);
+          alert(
+            `تم استيراد بيانات العملاء:\n\n` +
+            `• عملاء جدد: ${added}\n` +
+            `• عملاء حُدِّثت بياناتهم: ${updated}\n` +
+            (skipped > 0 ? `• صفوف تُخطّيت (بلا كود أو بلا اسم): ${skipped}\n` : '') +
+            `\nاضغط «حفظ السحابة» لتأكيد التغييرات.`
+          );
+          if (e.target) e.target.value = '';
+          return;
+        }
+
+        if (type === 'branches') {
           setBranches(prev => [...prev, ...data.map((item: any) => ({
             id: Math.random().toString(36).substr(2, 9),
             code: (item["كود الفرع"] || item["كود"] || item["Code"] || item["code"] || '').toString().trim(),
@@ -502,6 +612,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       <input type="file" ref={jobFileInputRef} className="hidden" accept=".xlsx, .xls" onChange={(e) => handleExcelImport(e, 'jobs')} />
       <input type="file" ref={userFileInputRef} className="hidden" accept=".xlsx, .xls" onChange={(e) => handleExcelImport(e, 'users')} />
       <input type="file" ref={planFileInputRef} className="hidden" accept=".xlsx, .xls" onChange={(e) => handleExcelImport(e, 'plans')} />
+      <input type="file" ref={customerFileInputRef} className="hidden" accept=".xlsx, .xls" onChange={(e) => handleExcelImport(e, 'customers')} />
 
       <div className="admin-shell admin-shell--edge">
         {/* ===== الشريط الجانبي ===== */}
@@ -936,120 +1047,199 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           </div>
         )}
-        {activeTab === 'plans' && (
+        {activeTab === 'customers' && (
           <div className="space-y-4 md:space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2.5 bg-slate-900/50 p-3 md:p-4 rounded-2xl border border-slate-700">
               <div className="flex items-center gap-2.5">
-                <Navigation size={18} className="text-blue-400 shrink-0" />
-                <h3 className="text-xs md:text-sm font-black text-white uppercase tracking-tighter">خطط زيارات الفروع</h3>
+                <Store size={18} className="text-blue-400 shrink-0" />
+                <div>
+                  <h3 className="text-xs md:text-sm font-black text-white">سجل العملاء</h3>
+                  <p className="text-[11px] text-slate-400 font-bold">{customers.length} عميل · الموظف يرى عملاء توكيله وحده</p>
+                </div>
               </div>
               <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
-                <button onClick={() => { downloadTemplate('plans'); logAction('تحميل نموذج', 'نموذج استيراد خطط الزيارات'); }} className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-[10px] font-black transition-all"><Download size={13}/> نموذج استيراد</button>
-                <button onClick={() => planFileInputRef.current?.click()} className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white rounded-lg text-[10px] font-black transition-all"><FileSpreadsheet size={13}/> استيراد الخطط</button>
-                <button onClick={() => { setVisitPlans([]); logAction('مسح جميع الخطط', 'تم مسح كافة خطط الزيارات'); }} className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 bg-red-600/10 text-red-400 border border-red-900/30 rounded-lg text-[10px] font-black transition-all"><Trash2 size={13}/> مسح الكل</button>
+                <button onClick={() => { downloadTemplate('customers'); logAction('تحميل نموذج', 'نموذج استيراد العملاء'); }} className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-xs font-black transition-all"><Download size={13}/> نموذج استيراد</button>
+                <button onClick={() => customerFileInputRef.current?.click()} className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg text-xs font-black transition-all"><FileSpreadsheet size={13}/> استيراد العملاء</button>
+                <button onClick={() => { if (confirm(`حذف جميع العملاء (${customers.length})؟\n\nلن يُحذفوا من السحابة إلا بعد الضغط على «حفظ السحابة».`)) { setCustomers([]); logAction('مسح جميع العملاء', `تم مسح ${customers.length} عميل`); } }} className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 bg-red-600/10 text-red-400 border border-red-900/30 rounded-lg text-xs font-black transition-all"><Trash2 size={13}/> مسح الكل</button>
               </div>
             </div>
 
+            <div className="bg-blue-950/25 border border-blue-800/40 rounded-2xl p-3.5 text-xs text-blue-200/90 font-bold leading-relaxed">
+              الاستيراد يدمج بكود العميل: الكود الموجود تُحدَّث بياناته، والجديد يُضاف — فإعادة رفع كشف محدّث لا تُكرّر العملاء.
+              وعمود «النطاق» اختياري، ومن يتركه فارغاً يأخذ الافتراضي ({config.defaultCustomerRadius || 100} م).
+            </div>
+
             <div className="bg-slate-900/50 p-3.5 md:p-4 rounded-2xl border border-slate-700 space-y-2.5">
-               <h4 className="text-xs font-black text-blue-400 uppercase tracking-widest flex items-center gap-1.5"><Plus size={15}/> إضافة زيارة يدوية</h4>
-               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
-                  <select className="bg-slate-900 border border-slate-700 focus:border-blue-500 rounded-xl px-3 py-2 text-xs outline-none text-white" value={newPlanUserId} onChange={e => setNewPlanUserId(e.target.value)}>
-                    <option value="">اختر الموظف</option>
-                    {allUsers.filter(u => u.role !== 'admin').map(u => <option key={u.id} value={u.id}>{u.fullName} ({u.serialNumber})</option>)}
-                  </select>
-                  <select className="bg-slate-900 border border-slate-700 focus:border-blue-500 rounded-xl px-3 py-2 text-xs outline-none text-white" value={newPlanBranchId} onChange={e => setNewPlanBranchId(e.target.value)}>
-                    <option value="">اختر الفرع</option>
-                    <option value="holiday">إجازة (Holiday)</option>
-                    {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                  </select>
-                  <input type="date" className="bg-slate-900 border border-slate-700 focus:border-blue-500 rounded-xl px-3 py-2 text-xs outline-none text-white font-mono" value={newPlanDate} onChange={e => setNewPlanDate(e.target.value)} />
-                  <button onClick={addManualPlan} className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-black py-2 px-4 text-xs flex items-center justify-center gap-1.5 transition-all shadow-md">
-                    <Plus size={16}/> إضافة زيارة
+               <h4 className="text-xs font-black text-blue-400 flex items-center gap-1.5"><Plus size={15}/> إضافة عميل يدوياً</h4>
+               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                  <input type="text" placeholder="كود العميل" className="bg-slate-900 border border-slate-700 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-mono outline-none text-white" value={newCustomer.code || ''} onChange={e => setNewCustomer({...newCustomer, code: e.target.value})} />
+                  <input type="text" placeholder="اسم العميل" className="bg-slate-900 border border-slate-700 focus:border-blue-500 rounded-xl px-3 py-2 text-xs outline-none text-white col-span-2 sm:col-span-1" value={newCustomer.name || ''} onChange={e => setNewCustomer({...newCustomer, name: e.target.value})} />
+                  <input type="text" placeholder="كود التوكيل" className="bg-slate-900 border border-slate-700 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-mono outline-none text-white" value={newCustomer.agencyCode || ''} onChange={e => setNewCustomer({...newCustomer, agencyCode: e.target.value})} />
+                  <input type="text" placeholder="اسم التوكيل" className="bg-slate-900 border border-slate-700 focus:border-blue-500 rounded-xl px-3 py-2 text-xs outline-none text-white" value={newCustomer.agencyName || ''} onChange={e => setNewCustomer({...newCustomer, agencyName: e.target.value})} />
+                  <input type="number" placeholder="إجمالي المديونية" className="bg-slate-900 border border-slate-700 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-mono outline-none text-white" value={newCustomer.totalDebt || ''} onChange={e => setNewCustomer({...newCustomer, totalDebt: parseFloat(e.target.value) || 0})} />
+                  <input type="number" placeholder="الأوفر ديو" className="bg-slate-900 border border-slate-700 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-mono outline-none text-white" value={newCustomer.overdueDebt || ''} onChange={e => setNewCustomer({...newCustomer, overdueDebt: parseFloat(e.target.value) || 0})} />
+                  <input type="number" step="0.000001" placeholder="خط العرض" className="bg-slate-900 border border-slate-700 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-mono outline-none text-white" value={newCustomer.latitude || ''} onChange={e => setNewCustomer({...newCustomer, latitude: parseFloat(e.target.value) || 0})} />
+                  <input type="number" step="0.000001" placeholder="خط الطول" className="bg-slate-900 border border-slate-700 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-mono outline-none text-white" value={newCustomer.longitude || ''} onChange={e => setNewCustomer({...newCustomer, longitude: parseFloat(e.target.value) || 0})} />
+                  <input type="number" placeholder="النطاق (اختياري)" className="bg-slate-900 border border-slate-700 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-mono outline-none text-white" value={newCustomer.radius || ''} onChange={e => setNewCustomer({...newCustomer, radius: parseInt(e.target.value) || undefined})} />
+                  <button
+                    onClick={() => {
+                      const code = (newCustomer.code || '').trim();
+                      const name = (newCustomer.name || '').trim();
+                      if (!code || !name) { alert('كود العميل واسمه إلزاميان.'); return; }
+                      if (customers.some(c => c.code === code)) { alert(`الكود ${code} مستعمل بالفعل لعميل آخر.`); return; }
+                      setCustomers([...customers, { ...newCustomer, id: code, code, name } as Customer]);
+                      logAction('إضافة عميل', `العميل: ${name} (${code})`);
+                      setNewCustomer({ code: '', name: '', agencyCode: '', agencyName: '', totalDebt: 0, overdueDebt: 0, latitude: 0, longitude: 0 });
+                    }}
+                    className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-black py-2 px-4 text-xs flex items-center justify-center gap-1.5 transition-all col-span-2 sm:col-span-1 shadow-md"
+                  >
+                    <Plus size={16}/> إضافة عميل
                   </button>
                </div>
             </div>
+
+            <div className="relative">
+              <input
+                type="text"
+                value={customerSearch}
+                onChange={e => setCustomerSearch(e.target.value)}
+                placeholder="ابحث بكود العميل أو باسمه أو بالتوكيل…"
+                className="w-full bg-slate-900 border border-slate-700 focus:border-blue-500 rounded-xl pr-10 pl-4 py-2.5 text-xs outline-none text-white"
+              />
+              <Search size={15} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+            </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-right md:min-w-[800px]">
+              <table className="w-full text-right md:min-w-[980px]">
                 <thead>
                   <tr className="border-b border-slate-700 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">
-                    <th className="py-4 px-2 text-right">الموظف</th>
-                    <th className="py-4 px-2">الرقم التسلسلي</th>
-                    <th className="py-4 px-2">الفرع المستهدف</th>
-                    <th className="py-4 px-2">التاريخ</th>
+                    <th className="py-4 px-2 text-right">العميل</th>
+                    <th className="py-4 px-2">التوكيل</th>
+                    <th className="py-4 px-2">إجمالي المديونية</th>
+                    <th className="py-4 px-2">الأوفر ديو</th>
+                    <th className="py-4 px-2">الإحداثيات</th>
+                    <th className="py-4 px-2">النطاق</th>
                     <th className="py-4 px-2">إجراءات</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {visitPlans.sort((a,b) => b.date.localeCompare(a.date)).map(plan => {
-                    const user = allUsers.find(u => u.id === plan.userId);
-                    const branch = branches.find(b => b.id === plan.branchId);
-                    const isEditing = editingPlanId === plan.id;
+                  {(() => {
+                    const q = customerSearch.trim().toLowerCase();
+                    const shown = q
+                      ? customers.filter(c =>
+                          c.code.toLowerCase().includes(q) ||
+                          c.name.toLowerCase().includes(q) ||
+                          c.agencyCode.toLowerCase().includes(q) ||
+                          c.agencyName.toLowerCase().includes(q))
+                      : customers;
 
-                    return (
-                      <tr key={plan.id} className="border-b border-slate-700/50 hover:bg-slate-900/30 transition-all text-center">
-                        <td data-label="الموظف" className="py-4 px-2 text-right">
-                          {isEditing ? (
-                            <select 
-                              className={inputClasses} 
-                              value={editPlanData.userId || plan.userId} 
-                              onChange={e => setEditPlanData({ ...editPlanData, userId: e.target.value })}
-                            >
-                              {allUsers.filter(u => u.role !== 'admin').map(u => <option key={u.id} value={u.id}>{u.fullName}</option>)}
-                            </select>
-                          ) : (
-                            <div className="flex flex-col">
-                              <span className="font-bold text-sm text-white">{user?.fullName || plan.userName || 'موظف محذوف'}</span>
-                              <span className="text-blue-400 text-[10px] font-black uppercase">{user?.jobTitle}</span>
+                    if (shown.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={7} className="py-12 text-center">
+                            <Store size={36} className="mx-auto opacity-20 mb-3" />
+                            <div className="text-sm font-bold text-slate-300">
+                              {customers.length === 0 ? 'لا يوجد عملاء بعد' : 'لا نتائج لبحثك'}
                             </div>
-                          )}
-                        </td>
-                        <td data-label="الرقم التسلسلي" className="py-4 px-2">
-                          <span className="text-xs text-slate-400 font-mono">{user?.serialNumber || plan.userSerial || 'N/A'}</span>
-                        </td>
-                        <td data-label="الفرع المستهدف" className="py-4 px-2">
-                          {isEditing ? (
-                            <select 
-                              className={inputClasses} 
-                              value={editPlanData.branchId || plan.branchId} 
-                              onChange={e => setEditPlanData({ ...editPlanData, branchId: e.target.value })}
-                            >
-                              <option value="holiday">إجازة (Holiday)</option>
-                              {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                            </select>
-                          ) : (
-                            <span className={`text-xs font-bold ${plan.branchName === 'Holiday' ? 'text-orange-400' : 'text-emerald-400'}`}>
-                              {branch?.name || plan.branchName || 'فرع محذوف'}
-                            </span>
-                          )}
-                        </td>
-                        <td data-label="التاريخ" className="py-4 px-2 text-slate-400 text-xs font-mono">
-                          {isEditing ? (
-                            <input 
-                              type="date" 
-                              className={inputClasses} 
-                              value={editPlanData.date || plan.date} 
-                              onChange={e => setEditPlanData({ ...editPlanData, date: e.target.value })}
-                            />
-                          ) : plan.date}
-                        </td>
-                        <td data-label="إجراءات" className="py-4 px-2">
-                          <div className="flex items-center justify-center gap-1">
+                            <div className="text-xs text-slate-500 mt-1">
+                              {customers.length === 0
+                                ? 'حمّل نموذج الاستيراد، املأه ببيانات عملائك، ثم استورده.'
+                                : 'جرّب كود العميل بدل الاسم، أو جزءاً منه.'}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    return shown.map(c => {
+                      const isEditing = editingCustomerId === c.id;
+                      const missingGeo = !c.latitude || !c.longitude;
+                      return (
+                        <tr key={c.id} className="border-b border-slate-700/50 hover:bg-slate-900/30 transition-all text-center">
+                          <td data-label="العميل" className="py-4 px-2 text-right">
                             {isEditing ? (
-                              <>
-                                <button onClick={() => saveEditPlan(plan.id)} className="text-green-500 hover:text-green-400 p-1.5"><Check size={16}/></button>
-                                <button onClick={() => { setEditingPlanId(null); setEditPlanData({}); }} className="text-slate-500 hover:text-slate-400 p-1.5"><X size={16}/></button>
-                              </>
+                              <input className="bg-slate-900 border border-blue-500 rounded px-2 py-1 text-xs w-full text-white" value={editCustomerData.name || ''} onChange={e => setEditCustomerData({...editCustomerData, name: e.target.value})} />
                             ) : (
-                              <>
-                                <button onClick={() => { setEditingPlanId(plan.id); setEditPlanData(plan); }} className="text-blue-500 hover:text-blue-400 p-1.5"><Edit2 size={16}/></button>
-                                <button onClick={() => { if(confirm('حذف هذه الخطة؟')) { setVisitPlans(visitPlans.filter(p => p.id !== plan.id)); logAction('حذف خطة زيارة', `الموظف: ${user?.fullName || plan.userName}, الفرع: ${branch?.name || plan.branchName}`); } }} className="text-slate-500 hover:text-red-400 p-1.5"><Trash2 size={16}/></button>
-                              </>
+                              <div className="flex flex-col">
+                                <span className="font-bold text-sm text-white">{c.name}</span>
+                                <span className="text-amber-400 text-xs font-black font-mono">{c.code}</span>
+                              </div>
                             )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                          </td>
+                          <td data-label="التوكيل" className="py-4 px-2">
+                            {isEditing ? (
+                              <div className="flex gap-1">
+                                <input className="bg-slate-900 border border-blue-500 rounded px-2 py-1 text-xs w-full text-white font-mono" placeholder="كود" value={editCustomerData.agencyCode || ''} onChange={e => setEditCustomerData({...editCustomerData, agencyCode: e.target.value})} />
+                                <input className="bg-slate-900 border border-blue-500 rounded px-2 py-1 text-xs w-full text-white" placeholder="اسم" value={editCustomerData.agencyName || ''} onChange={e => setEditCustomerData({...editCustomerData, agencyName: e.target.value})} />
+                              </div>
+                            ) : (
+                              <div className="flex flex-col">
+                                <span className="text-xs text-slate-300 font-bold">{c.agencyName || '—'}</span>
+                                <span className="text-[11px] text-slate-500 font-mono">{c.agencyCode}</span>
+                              </div>
+                            )}
+                          </td>
+                          <td data-label="إجمالي المديونية" className="py-4 px-2">
+                            {isEditing ? (
+                              <input type="number" className="bg-slate-900 border border-blue-500 rounded px-2 py-1 text-xs w-24 text-center text-white font-mono" value={editCustomerData.totalDebt ?? ''} onChange={e => setEditCustomerData({...editCustomerData, totalDebt: parseFloat(e.target.value) || 0})} />
+                            ) : (
+                              <span className="text-xs font-black text-white font-mono">{(c.totalDebt || 0).toLocaleString('en-US')}</span>
+                            )}
+                          </td>
+                          <td data-label="الأوفر ديو" className="py-4 px-2">
+                            {isEditing ? (
+                              <input type="number" className="bg-slate-900 border border-blue-500 rounded px-2 py-1 text-xs w-24 text-center text-white font-mono" value={editCustomerData.overdueDebt ?? ''} onChange={e => setEditCustomerData({...editCustomerData, overdueDebt: parseFloat(e.target.value) || 0})} />
+                            ) : (
+                              <span className={`text-xs font-black font-mono ${c.overdueDebt > 0 ? 'text-red-400' : 'text-slate-500'}`}>
+                                {(c.overdueDebt || 0).toLocaleString('en-US')}
+                              </span>
+                            )}
+                          </td>
+                          <td data-label="الإحداثيات" className="py-4 px-2">
+                            {isEditing ? (
+                              <div className="flex gap-1">
+                                <input type="number" step="0.000001" className="bg-slate-900 border border-blue-500 rounded px-2 py-1 text-[11px] w-full font-mono text-white" placeholder="Lat" value={editCustomerData.latitude ?? ''} onChange={e => setEditCustomerData({...editCustomerData, latitude: parseFloat(e.target.value) || 0})} />
+                                <input type="number" step="0.000001" className="bg-slate-900 border border-blue-500 rounded px-2 py-1 text-[11px] w-full font-mono text-white" placeholder="Lng" value={editCustomerData.longitude ?? ''} onChange={e => setEditCustomerData({...editCustomerData, longitude: parseFloat(e.target.value) || 0})} />
+                              </div>
+                            ) : missingGeo ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-black text-red-400 bg-red-900/20 border border-red-900/40 px-2 py-1 rounded-lg">
+                                <AlertTriangle size={11} /> بلا موقع
+                              </span>
+                            ) : (
+                              <span className="text-[11px] text-slate-400 font-mono">{c.latitude.toFixed(6)}, {c.longitude.toFixed(6)}</span>
+                            )}
+                          </td>
+                          <td data-label="النطاق" className="py-4 px-2">
+                            {isEditing ? (
+                              <input type="number" className="bg-slate-900 border border-blue-500 rounded px-2 py-1 text-xs w-20 text-center text-white font-mono" value={editCustomerData.radius ?? ''} onChange={e => setEditCustomerData({...editCustomerData, radius: parseInt(e.target.value) || undefined})} />
+                            ) : (
+                              <span className="text-xs font-bold text-blue-400 font-mono">
+                                {c.radius ? `${c.radius}م` : `${config.defaultCustomerRadius || 100}م`}
+                              </span>
+                            )}
+                          </td>
+                          <td data-label="إجراءات" className="py-4 px-2">
+                            <div className="flex items-center justify-center gap-2">
+                              {isEditing ? (
+                                <>
+                                  <button onClick={() => {
+                                    setCustomers(customers.map(x => x.id === c.id ? { ...x, ...editCustomerData } as Customer : x));
+                                    logAction('تعديل عميل', `العميل: ${c.name} (${c.code})`);
+                                    setEditingCustomerId(null); setEditCustomerData({});
+                                  }} className="text-green-500 hover:bg-green-500/10 p-2 rounded-lg transition-all"><Check size={18}/></button>
+                                  <button onClick={() => { setEditingCustomerId(null); setEditCustomerData({}); }} className="text-red-500 hover:bg-red-500/10 p-2 rounded-lg transition-all"><X size={18}/></button>
+                                </>
+                              ) : (
+                                <>
+                                  <button onClick={() => { setEditingCustomerId(c.id); setEditCustomerData(c); }} className="text-blue-400 hover:bg-blue-400/10 p-2 rounded-lg transition-all" title="تعديل"><Edit2 size={16}/></button>
+                                  <button onClick={() => { if(confirm(`حذف العميل ${c.name}؟`)) { setCustomers(customers.filter(x => x.id !== c.id)); logAction('حذف عميل', `العميل: ${c.name} (${c.code})`); } }} className="text-slate-500 hover:text-red-400 hover:bg-red-400/10 p-2 rounded-lg transition-all" title="حذف"><Trash2 size={16}/></button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    });
+                  })()}
                 </tbody>
               </table>
             </div>
@@ -1279,6 +1469,24 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   onChange={e => setConfig({...config, auditLogUrl: e.target.value})} 
                 />
                 <p className="text-[9px] text-slate-500 font-bold italic">ملاحظة: إذا كنت تريد استخدام ملف منفصل، قم بإنشاء ملف Google Sheet جديد وانسخ الـ ID الخاص به وضعه هنا.</p>
+              </div>
+
+              <div className="space-y-2 pt-4 border-t border-slate-700">
+                <label className="text-xs font-black text-slate-400 flex items-center gap-1.5">
+                  <MapPin size={13} /> النطاق الافتراضي حول العميل (بالمتر)
+                </label>
+                <input
+                  type="number"
+                  min="10"
+                  placeholder="100"
+                  className={inputClasses}
+                  value={config.defaultCustomerRadius || ''}
+                  onChange={e => setConfig({ ...config, defaultCustomerRadius: parseInt(e.target.value) || undefined })}
+                />
+                <p className="text-[11px] text-slate-500 font-bold leading-relaxed">
+                  يُطبَّق على كل عميل تُرك عمود «النطاق» فارغاً عنده. الموظف لا يستطيع فتح زيارة أو إغلاقها خارج هذه المسافة.
+                  اضغط «حفظ السحابة» بعد التغيير ليصل الخادم.
+                </p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-slate-700">

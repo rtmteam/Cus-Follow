@@ -231,6 +231,9 @@ const App: React.FC = () => {
       setConfig(prev => {
         const updatedConfig = { ...prev, lastUpdated: new Date().toISOString(), syncUrl: url, googleSheetLink: url };
         if (data.holidays) updatedConfig.holidays = data.holidays;
+        if (data.customerRadius && !isNaN(Number(data.customerRadius))) {
+          updatedConfig.defaultCustomerRadius = Number(data.customerRadius);
+        }
         const { adminPassword, ...configToSave } = updatedConfig;
         localStorage.setItem('attendance_config', JSON.stringify(configToSave));
         return updatedConfig;
@@ -735,6 +738,7 @@ const App: React.FC = () => {
                 records={records} config={config} setConfig={setConfig} allUsers={allUsers} setAllUsers={setAllUsers}
                 reportAccounts={reportAccounts} setReportAccounts={setReportAccounts}
                 visitPlans={visitPlans} setVisitPlans={setVisitPlans}
+                customers={customers} setCustomers={setCustomers}
                 onRefresh={() => syncWithCloud(config.syncUrl)} isSyncing={isSyncing}
                 logAction={logAction}
               />

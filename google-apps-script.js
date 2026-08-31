@@ -37,7 +37,7 @@ function doPost(e) {
 
       // 1. تحديث إعدادات النظام (Config Sheet)
       // يتم التحديث فقط إذا تم إرسال الفروع أو الوظائف أو الإجازات
-      if (data.branches || data.jobs || data.holidays || (data.adminUsername && data.adminPassword)) {
+      if (data.branches || data.jobs || data.holidays || data.customerRadius || (data.adminUsername && data.adminPassword)) {
         var configSheet = getOrCreateSheet(ss, "Config");
         var configData = configSheet.getDataRange().getValues();
         var configMap = {};
@@ -51,6 +51,9 @@ function doPost(e) {
         if (data.holidays && Array.isArray(data.holidays)) configMap["holidays"] = JSON.stringify(data.holidays);
         if (data.adminUsername) configMap["admin_user"] = data.adminUsername;
         if (data.adminPassword) configMap["admin_pass"] = data.adminPassword;
+        if (data.customerRadius && !isNaN(parseInt(data.customerRadius))) {
+          configMap["customer_radius"] = parseInt(data.customerRadius);
+        }
 
         configSheet.clear();
         configSheet.appendRow(["Key", "Value"]);
@@ -140,6 +143,44 @@ function doPost(e) {
             p.branchName ? p.branchName.toString() : "",
             p.date ? p.date.toString() : ""
           ]);
+        });
+      }
+
+      // 5. تحديث العملاء
+      //
+      // المسح ثم الكتابة كما في بقية الأقسام — لوحة الإدارة ترسل القائمة
+      // كاملةً دائماً، ولا يكتب التطبيق في هذه الصفحة إلا من هنا.
+      if (data.customers) {
+        var custSheet = getOrCreateSheet(ss, "Customers");
+        custSheet.clear();
+        custSheet.appendRow([
+          "كود العميل", "اسم العميل", "كود التوكيل", "اسم التوكيل",
+          "إجمالي المديونية", "المديونية الأوفر ديو",
+          "خط العرض", "خط الطول", "النطاق"
+        ]);
+        data.customers.forEach(function (c) {
+          custSheet.appendRow([
+            c.code ? c.code.toString() : "",
+            c.name ? c.name.toString() : "",
+            c.agencyCode ? c.agencyCode.toString() : "",
+            c.agencyName ? c.agencyName.toString() : "",
+            isNaN(parseFloat(c.totalDebt)) ? 0 : parseFloat(c.totalDebt),
+            isNaN(parseFloat(c.overdueDebt)) ? 0 : parseFloat(c.overdueDebt),
+            isNaN(parseFloat(c.latitude)) ? 0 : parseFloat(c.latitude),
+            isNaN(parseFloat(c.longitude)) ? 0 : parseFloat(c.longitude),
+            (c.radius && !isNaN(parseInt(c.radius))) ? parseInt(c.radius) : ""
+          ]);
+        });
+      }
+
+      // 6. أسباب تجاوز فترة الائتمان
+      if (data.visitReasons) {
+        var vrSheet = getOrCreateSheet(ss, "VisitReasons");
+        vrSheet.clear();
+        vrSheet.appendRow(["السبب"]);
+        data.visitReasons.forEach(function (r) {
+          var txt = r && r.text ? r.text.toString().trim() : "";
+          if (txt !== "") vrSheet.appendRow([txt]);
         });
       }
 
@@ -1243,11 +1284,120 @@ function doGet(e) {
   })).setMimeType(ContentService.MimeType.JSON);
 }
 
+// ======================================================
+// تهيئة الشيت — تُشغَّل مرة واحدة بيدك من محرر Apps Script
+// ======================================================
+/**
+ * ينشئ كل الصفحات التي يحتاجها النظام بعناوينها الصحيحة.
+ *
+ * كيف تشغّلها:
+ *   ١) افتح شيت جوجل الجديد ← الإضافات ← Apps Script
+ *   ٢) الصق هذا الملف كاملاً
+ *   ٣) اختر setupSheets من قائمة الدوال أعلى المحرر ثم اضغط Run
+ *   ٤) اقبل صلاحيات الوصول للشيت حين تُطلب منك
+ *
+ * آمنة للتكرار: تتخطّى أي صفحة موجودة ولا تمسّ صفّاً واحداً من بياناتك،
+ * فيمكنك تشغيلها مجدداً بعد أي تحديث لإضافة ما استُجدّ من صفحات.
+ */
+function setupSheets() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  var needed = [
+    "Config",        // إعدادات النظام (مفتاح/قيمة)
+    "Users",         // الموظفون
+    "Customers",     // العملاء — تملؤه أنت أو تستورده من التطبيق
+    "VisitReasons",  // أسباب تجاوز فترة الائتمان
+    "Visits",        // الزيارات — يكتبه التطبيق تلقائياً
+    "AuditLog",      // سجلّ التدقيق
+    "Attendance",    // يخدم شاشة التقارير الحالية
+    "ReportAccounts",// حسابات متابعة التقارير
+    "VisitPlans"     // متروك للتوافق مع النسخة السابقة
+  ];
+
+  var created = [];
+  var existed = [];
+
+  for (var i = 0; i < needed.length; i++) {
+    if (ss.getSheetByName(needed[i])) {
+      existed.push(needed[i]);
+    } else {
+      getOrCreateSheet(ss, needed[i]);
+      created.push(needed[i]);
+    }
+  }
+
+  // ---------- بذور الإعدادات ----------
+  // لا تُكتب إلا إن كان المفتاح غائباً، فلا تُدهس قيمة ضبطتَها بنفسك.
+  var seededConfig = [];
+  seededConfig = seededConfig.concat(seedConfigKey(ss, "admin_user", "admin"));
+  seededConfig = seededConfig.concat(seedConfigKey(ss, "admin_pass", "Ba522129"));
+  seededConfig = seededConfig.concat(seedConfigKey(ss, "customer_radius", "100"));
+
+  // ---------- بذور أسباب التجاوز ----------
+  // أمثلة تُعدَّل وتُحذف بحرّية — وجودها يمنع قائمة فارغة أمام الموظف
+  // في أول تشغيل، وهي أسوأ ما يواجهه في الميدان.
+  var reasonSheet = getOrCreateSheet(ss, "VisitReasons");
+  var seededReasons = 0;
+  if (reasonSheet.getLastRow() < 2) {
+    var samples = [
+      "العميل مسافر",
+      "خلاف على فاتورة",
+      "ضائقة مالية لدى العميل",
+      "تأخر تحصيل من السوق",
+      "المسؤول عن السداد غير موجود",
+      "بضاعة مرتجعة لم تُسوَّ"
+    ];
+    for (var r = 0; r < samples.length; r++) reasonSheet.appendRow([samples[r]]);
+    seededReasons = samples.length;
+  }
+
+  // ---------- التقرير ----------
+  var lines = [];
+  lines.push("انتهت التهيئة بنجاح.");
+  lines.push("");
+  lines.push("صفحات أُنشئت (" + created.length + "): " + (created.join("، ") || "لا شيء"));
+  lines.push("صفحات كانت موجودة (" + existed.length + "): " + (existed.join("، ") || "لا شيء"));
+  lines.push("إعدادات أُضيفت: " + (seededConfig.join("، ") || "لا شيء"));
+  lines.push("أسباب تجاوز أُضيفت: " + seededReasons);
+  lines.push("");
+  lines.push("الخطوات التالية:");
+  lines.push("١) املأ صفحة Customers ببيانات عملائك (أو استوردها من لوحة الإدارة).");
+  lines.push("٢) في صفحة Users، ضع كود التوكيل أو اسمه في عمود Default Branch لكل موظف.");
+  lines.push("٣) انشر السكربت: Deploy ← New deployment ← Web app ← Execute as: Me ← Who has access: Anyone.");
+  lines.push("٤) انسخ رابط النشر وضعه في public/server-config.json.");
+  lines.push("");
+  lines.push("تنبيه أمني: كلمة مرور المسؤول في صفحة Config هي نفسها المكتوبة");
+  lines.push("داخل حزمة التطبيق، فمن يفتح مصدر الصفحة يقرؤها. غيّرها في الموضعين معاً.");
+
+  var report = lines.join("\n");
+  Logger.log(report);
+
+  // محاولة عرض الرسالة في الشيت — تفشل بصمت إن شُغّلت بلا واجهة
+  try {
+    SpreadsheetApp.getUi().alert("تهيئة Uniteam", report, SpreadsheetApp.getUi().ButtonSet.OK);
+  } catch (e) {}
+
+  return report;
+}
+
+/** يكتب مفتاح إعدادات إن لم يكن موجوداً. يُعيد اسمه إن كتبه، وإلا مصفوفة فارغة. */
+function seedConfigKey(ss, key, value) {
+  var sheet = getOrCreateSheet(ss, "Config");
+  var rows = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (rows[i][0] && rows[i][0].toString().trim() === key) return [];
+  }
+  sheet.appendRow([key, value]);
+  return [key];
+}
+
 function getOrCreateSheet(ss, name) {
   var sheet = ss.getSheetByName(name);
   if (!sheet) {
     sheet = ss.insertSheet(name);
-    if (name === "Users") {
+    if (name === "Config") {
+      sheet.appendRow(["Key", "Value"]);
+    } else if (name === "Users") {
       sheet.appendRow(["ID", "Full Name", "National ID", "Serial Number", "Job Title", "Device ID", "Password", "Default Branch", "Reg Date", "Last Update", "CheckIn", "CheckOut", "AllowedDeviceCount", "LastGPS"]);
     } else if (name === "Attendance") {
       sheet.appendRow(["Log Date", "Name", "Serial Number", "Job", "Branch Code", "Branch", "Type", "ISO Time", "GPS", "Reason", "Time Diff"]);
