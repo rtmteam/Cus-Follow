@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { User, Customer, VisitReason, Visit } from '../types';
-import { MapPin, Clock, CheckCircle, AlertCircle, Cloud, FileText, Search, Store, DoorOpen, DoorClosed, Wallet, AlertTriangle, CalendarClock, UserRound, MessageSquare, Ban, ChevronDown } from 'lucide-react';
+import { MapPin, Clock, CheckCircle, AlertCircle, Cloud, FileText, Search, Store, DoorOpen, DoorClosed, Wallet, AlertTriangle, CalendarClock, UserRound, MessageSquare, Ban, ChevronDown, Navigation } from 'lucide-react';
 import { calculateDistance, getDeviceFingerprint, getEgyptTime, getRealNetworkTime, checkDeveloperOptionsStatus, checkMockLocationStatus } from '../utils';
 
 interface UserDashboardProps {
@@ -13,7 +13,11 @@ interface UserDashboardProps {
   /** النطاق الافتراضي حول العميل حين يُترك عمود النطاق فارغاً */
   customerRadius: number;
   googleSheetLink: string;
-  onRefresh: () => void;
+  /**
+   * مزامنة فورية. **تُعيد بيانات الخادم** لا void: بعد فشل غامض نحتاج
+   * أن نسأل الخادم ماذا حدث فعلاً، وحالة React لا تصل تزامنياً.
+   */
+  onRefresh: () => Promise<any> | void;
   isSyncing: boolean;
   lastUpdated?: string;
   logAction: (action: string, details?: string) => void;
@@ -22,11 +26,15 @@ interface UserDashboardProps {
 /**
  * مهلة إرسال أوامر الزيارة.
  *
- * عشرون ثانية: أطول من أي شبكة بيانات معقولة حتى المتقطّعة، وأقصر من أن
- * يظن الموظف أن التطبيق تعطّل. عند تجاوزها يُلغى الطلب وتظهر رسالة تؤكد
- * له أن شيئاً لم يُسجَّل، فيعيد المحاولة بلا خوف من ازدواج التسجيل.
+ * رُفعت من ٢٠ إلى ٤٥ ثانية. العشرون كانت أقصر من زمن الخادم تحت الضغط،
+ * فكان الطلب يُلغى بينما الخادم يكمل الكتابة.
+ *
+ * وهنا الحقيقة التي بُنيت عليها كل الآلية أدناه:
+ * **إلغاء الطلب من الهاتف لا يُلغي عمل الخادم.** فانتهاء المهلة لا يعني
+ * أن شيئاً لم يحدث — يعني أننا لا نعرف. والفرق بين «لم يحدث» و«لا نعرف»
+ * هو الفرق بين رسالة صادقة وأخرى كاذبة.
  */
-const VISIT_TIMEOUT_MS = 20000;
+const VISIT_TIMEOUT_MS = 45000;
 
 /** مفتاح الزيارة المفتوحة محلياً — تنجو من إغلاق التطبيق وانطفاء الشاشة */
 const ACTIVE_VISIT_KEY = 'uniteam_active_visit';
@@ -101,6 +109,16 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
    * مرّات في القائمة فيظنّ الموظف أنهم عملاء مختلفون. آخر صفّ يغلب لأنه
    * الأحدث في الشيت.
    */
+  /**
+   * الموقع الذي رُتّبت عليه القائمة، يُلتقط لحظة فتحها ولا يتغيّر بعدها.
+   *
+   * الترتيب بالأقرب مفيد، لكن watchPosition يُحدّث الموقع كل ثانية تقريباً.
+   * ولو أُعيد الترتيب مع كل تحديث لتحرّكت الصفوف تحت إبهام الموظف وهو يقرأ،
+   * فيضغط على العميل الخطأ — ويفتح زيارة عند غير من قصد. التجميد يمنع هذا،
+   * ورقم المسافة في كل صفّ يبقى حيّاً يتحدّث.
+   */
+  const [sortAnchor, setSortAnchor] = useState<{ lat: number; lng: number } | null>(null);
+
   const myCustomers = (() => {
     const byCode = new Map<string, Customer>();
     for (const c of customers) {
@@ -109,7 +127,23 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
       if (!key) continue; // عميل بلا كود لا يُعرض: لا يمكن إرساله للخادم
       byCode.set(key, c);
     }
-    return Array.from(byCode.values()).sort((a, b) =>
+    const list = Array.from(byCode.values());
+
+    // الأقرب أولاً حين يكون الموقع معلوماً — الموظف واقف في الشارع
+    // وأقرب عميل إليه هو الذي يقصده غالباً.
+    // عميل بلا إحداثيات يُدفع لآخر القائمة: لا يمكن فتح زيارة عنده أصلاً.
+    if (sortAnchor) {
+      return list.sort((a, b) => {
+        const da = (a.latitude && a.longitude)
+          ? calculateDistance(sortAnchor.lat, sortAnchor.lng, a.latitude, a.longitude) : Infinity;
+        const db = (b.latitude && b.longitude)
+          ? calculateDistance(sortAnchor.lat, sortAnchor.lng, b.latitude, b.longitude) : Infinity;
+        if (da !== db) return da - db;
+        return String(a.name ?? '').localeCompare(String(b.name ?? ''), 'ar');
+      });
+    }
+
+    return list.sort((a, b) =>
       String(a.name ?? '').localeCompare(String(b.name ?? ''), 'ar')
     );
   })();
@@ -360,9 +394,11 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
    * «هل الردّ HTML» ثم وجود نصّ النجاح بعينه. بلا هذا الترتيب يظهر النجاح
    * على شاشة الموظف بينما لم يُكتب شيء على الشيت.
    */
-  const sendVisitCommand = async (payload: any, successText: string): Promise<{ ok: boolean; text: string }> => {
-    if (!googleSheetLink) throw new Error('NO_LINK');
-
+  /** محاولة واحدة — تُميّز الفشل الغامض عن الرفض المنطقي */
+  const attemptVisitCommand = async (
+    payload: any,
+    successText: string
+  ): Promise<{ ok: boolean; text: string }> => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), VISIT_TIMEOUT_MS);
 
@@ -393,14 +429,105 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
     return { ok: true, text };
   };
 
+  /**
+   * هل هذا فشل **غامض** — أي لا يخبرنا هل نفّذ الخادم الأمر أم لا؟
+   *
+   * المهلة والـ404 وأخطاء الخادم وانقطاع الشبكة كلها تحدث **بعد** أن
+   * يكون الطلب قد غادر الهاتف. فلا واحد منها دليل على أن شيئاً لم يحدث.
+   * أما الرفض المنطقي (رسالة عربية من الخادم) فهو جواب صريح لا غموض فيه.
+   */
+  const isInconclusive = (err: any): boolean =>
+    err?.name === 'AbortError' ||
+    err?.message === 'SERVER_404' ||
+    err?.message === 'Failed to fetch' ||
+    (typeof err?.message === 'string' && err.message.startsWith('HTTP Error:'));
+
+  /**
+   * سؤال الخادم مباشرةً: ما حال زيارتي الآن؟
+   * تُعيد الزيارة المفتوحة لهذا الموظف، أو null، أو undefined إن تعذّرت
+   * المزامنة نفسها — والتمييز بين null وundefined جوهري: الأولى «لا زيارة»
+   * والثانية «لا نعرف».
+   */
+  const fetchMyOpenVisit = async (): Promise<Visit | null | undefined> => {
+    try {
+      const fresh: any = await onRefresh();
+      if (!fresh || !Array.isArray(fresh.openVisits)) return undefined;
+      const mine = fresh.openVisits.find(
+        (v: any) =>
+          user.serialNumber &&
+          String(v.serialNumber).trim() === String(user.serialNumber).trim()
+      );
+      return mine || null;
+    } catch {
+      return undefined;
+    }
+  };
+
+  /**
+   * إرسال أمر زيارة على أربع مراحل: محاولة ← إعادة واحدة ← تحقّق ← إبلاغ.
+   *
+   * المرحلتان الثالثة والرابعة هما الجديد المهم. قبلهما كان التطبيق
+   * **يفترض** أن انتهاء المهلة يعني الفشل، فيقول للموظف «لم يُسجَّل شيء»
+   * بينما الزيارة مفتوحة على الخادم — ثم يعلق لأن نسخته المحلية لا تعرفها.
+   *
+   * الآن لا يفترض: يسأل ثم يُبلّغ بما رأى.
+   *
+   * @param verify دالة تقرأ حال الخادم وتحكم: هل نُفّذ الأمر فعلاً؟
+   */
+  const sendVisitCommand = async (
+    payload: any,
+    successText: string,
+    verify?: () => Promise<boolean | undefined>
+  ): Promise<{ ok: boolean; text: string }> => {
+    if (!googleSheetLink) throw new Error('NO_LINK');
+
+    let firstError: any = null;
+
+    // ١) المحاولة  ٢) إعادة واحدة بنفس visitId — آمنة بفضل فحص التكرار في الخادم
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        return await attemptVisitCommand(payload, successText);
+      } catch (err) {
+        if (!isInconclusive(err)) throw err;
+        if (!firstError) firstError = err;
+        logAction(
+          'تعذّر إرسال أمر زيارة',
+          `المحاولة ${attempt + 1} | ${(err as any)?.message || (err as any)?.name}`
+        );
+      }
+    }
+
+    // ٣) التحقق — لا نخمّن، نسأل
+    if (verify) {
+      const done = await verify();
+      if (done === true) {
+        logAction('أمر زيارة نُفِّذ رغم انقطاع الردّ', `المعرّف: ${payload.visitId || ''}`);
+        return { ok: true, text: successText };
+      }
+      if (done === false) {
+        return { ok: false, text: 'لم يصل الأمر إلى الخادم. أعد المحاولة من فضلك.' };
+      }
+    }
+
+    // ٤) تعذّر التحقق أيضاً — نقولها كما هي
+    throw firstError || new Error('UNKNOWN');
+  };
+
   /** ترجمة أخطاء الاتصال إلى رسائل تقول للموظف ما يفعل */
   const describeError = (err: any): string => {
     if (err?.message === 'NO_LINK') return 'التطبيق غير مربوط بالسحابة - يرجى تحديث الصفحة أو مراجعة الإدارة.';
     if (err?.message === 'SERVER_404') return 'رابط الشركة غير صحيح أو تم حذفه من السيرفر (404).';
     if (err?.message === 'INVALID_RESPONSE_FORMAT') return 'الرابط المسجل لا يؤدي إلى كود النظام. يرجى مراجعة المسؤول.';
     if (err?.message === 'OLD_OR_INVALID_CODE') return 'كود السيرفر قديم أو غير متوافق. لم تُسجَّل الزيارة.';
-    if (err?.name === 'AbortError') return 'الشبكة بطيئة ولم يكتمل الإرسال خلال ٢٠ ثانية. لم يُسجَّل شيء — انتقل لمكان بتغطية أفضل وحاول مجدداً.';
-    if (err?.message === 'Failed to fetch') return 'تعذر الوصول للسيرفر. تأكد من اتصال الإنترنت أو صحة الرابط.';
+
+    // الثلاث التالية تصل بعد فشل المحاولتين **وفشل التحقق** أيضاً.
+    // فنحن حقاً لا نعرف ما حدث — والرسالة تقول ذلك بدل أن تدّعي.
+    if (err?.name === 'AbortError')
+      return 'انقطع الاتصال قبل وصول ردّ الخادم، ولم نتمكّن من التأكد. اضغط «تحديث» لمعرفة حالة زيارتك قبل إعادة المحاولة.';
+    if (err?.message === 'SERVER_404')
+      return 'الخادم لا يستجيب حالياً. اضغط «تحديث» للتأكد من حالة زيارتك، وإن تكرّر الأمر راجع المسؤول.';
+    if (err?.message === 'Failed to fetch')
+      return 'تعذّر الوصول للسيرفر ولم نتمكّن من التأكد. تحقّق من الإنترنت واضغط «تحديث» قبل إعادة المحاولة.';
     return err?.message ? `خطأ: ${err.message}` : 'فشل الاتصال بالنظام. تأكد من الإنترنت.';
   };
 
@@ -435,7 +562,13 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
           latitude: coords.lat,
           longitude: coords.lng
         },
-        'Visit Started'
+        'Visit Started',
+        // نُفِّذ الأمر فعلاً إن صارت للموظف زيارة مفتوحة بهذا المعرّف
+        async () => {
+          const mine = await fetchMyOpenVisit();
+          if (mine === undefined) return undefined;
+          return !!mine && String(mine.id).trim() === String(visitId).trim();
+        }
       );
 
       if (!result.ok) {
@@ -564,7 +697,13 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
           longitude: coords.lng,
           comment: comment.trim()
         },
-        'Visit Cancelled'
+        'Visit Cancelled',
+        // نُفِّذ الإلغاء إن لم تعد الزيارة مفتوحة على الخادم
+        async () => {
+          const mine = await fetchMyOpenVisit();
+          if (mine === undefined) return undefined;
+          return !mine || String(mine.id).trim() !== String(activeVisit.id).trim();
+        }
       );
 
       if (!result.ok) {
@@ -631,7 +770,13 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
           paymentDate: paymentDate,
           comment: comment.trim()
         },
-        'Visit Closed'
+        'Visit Closed',
+        // نُفِّذ الإغلاق إن لم تعد الزيارة مفتوحة على الخادم
+        async () => {
+          const mine = await fetchMyOpenVisit();
+          if (mine === undefined) return undefined;
+          return !mine || String(mine.id).trim() !== String(activeVisit.id).trim();
+        }
       );
 
       if (!result.ok) {
@@ -970,7 +1115,11 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        setPickerOpen((o) => !o);
+                        setPickerOpen((o) => {
+                          // الترتيب يُثبَّت على موقع لحظة الفتح
+                          if (!o) setSortAnchor(liveLocation ? { lat: liveLocation.lat, lng: liveLocation.lng } : null);
+                          return !o;
+                        });
                         setStatus({ type: 'none', msg: '' });
                       }}
                       className={`w-full flex items-center justify-between gap-3 px-4 py-4 rounded-2xl border text-right transition-all min-h-[60px] ${
@@ -1013,10 +1162,14 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
 
                         {/* عدّاد النتائج — يؤكد للموظف أن البحث يعمل فعلاً */}
                         <div className="px-3.5 py-2 border-b border-slate-800 flex items-center justify-between gap-2">
-                          <span className="text-[11px] font-bold text-slate-400">
-                            {isSearching
-                              ? `${matchedCustomers.length} نتيجة`
-                              : `${myCustomers.length} عميل في توكيلك`}
+                          <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
+                            {isSearching ? (
+                              `${matchedCustomers.length} نتيجة`
+                            ) : sortAnchor ? (
+                              <><Navigation size={11} className="text-cyan-400" /> الأقرب إليك أولاً · {myCustomers.length} عميل</>
+                            ) : (
+                              `${myCustomers.length} عميل في توكيلك`
+                            )}
                           </span>
                           {isSearching && (
                             <button
@@ -1028,6 +1181,12 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                             </button>
                           )}
                         </div>
+
+                        {!isSearching && !sortAnchor && (
+                          <div className="px-3.5 py-2 text-[11px] font-bold text-amber-300/80 bg-amber-950/20 border-b border-slate-800 leading-relaxed">
+                            الترتيب أبجدي — الموقع لم يُحدَّد بعد. أغلق القائمة وافتحها ثانيةً بعد ظهور المسافة ليصير الأقرب أولاً.
+                          </div>
+                        )}
 
                         <div className="max-h-80 overflow-y-auto p-2 space-y-1.5">
                           {myCustomers.length === 0 ? (
@@ -1102,7 +1261,9 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                                 <div className="text-center text-xs font-bold text-slate-500 py-2.5 leading-relaxed">
                                   {isSearching
                                     ? `و${hiddenCount} نتيجة أخرى — ضيّق بحثك.`
-                                    : `و${hiddenCount} عميلاً آخر — اكتب في خانة البحث للوصول إليهم.`}
+                                    : sortAnchor
+                                      ? `و${hiddenCount} عميلاً أبعد — ابحث بالكود أو بالاسم للوصول إليهم.`
+                                      : `و${hiddenCount} عميلاً آخر — اكتب في خانة البحث للوصول إليهم.`}
                                 </div>
                               )}
                             </>

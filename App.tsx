@@ -13,6 +13,15 @@ import { LogoMark } from './components/Logo';
 // المصدر الرئيسي الوحيد لكلمة مرور المسؤول (Admin Password)
 // يمكنك تغييرها هنا مباشرة وسيتم تحديثها تلقائياً في كل التطبيق
 const ADMIN_PASSWORD_SSOT = 'Ba522129';
+
+/**
+ * مهلة مزامنة التحقّق.
+ *
+ * تُستدعى بعد فشل غامض في أمر زيارة لتسأل الخادم ماذا حدث فعلاً.
+ * قصيرة عمداً: الموظف ينتظر جواباً، ولو تأخّرت لصارت جزءاً من المشكلة
+ * التي جاءت تحلّها.
+ */
+const VERIFY_SYNC_TIMEOUT_MS = 15000;
 // ==========================================
 
 const App: React.FC = () => {
@@ -737,7 +746,8 @@ const App: React.FC = () => {
                 visitReasons={visitReasons}
                 openVisits={openVisits}
                 customerRadius={customerRadius}
-                googleSheetLink={config.googleSheetLink} onRefresh={() => syncWithCloud(config.syncUrl)}
+                googleSheetLink={config.googleSheetLink}
+                onRefresh={() => syncWithCloud(config.syncUrl, true, VERIFY_SYNC_TIMEOUT_MS)}
                 isSyncing={isSyncing} lastUpdated={config.lastUpdated}
                 logAction={logAction}
               />
