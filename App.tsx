@@ -1,18 +1,71 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { User, Branch, AppConfig, Job, ReportAccount, Customer, VisitReason, Visit } from './types';
 import Login from './components/Login';
-import AdminDashboard from './components/AdminDashboard';
 import UserDashboard from './components/UserDashboard';
-import ReportsView from './components/ReportsView';
+import { LazyAdminDashboard, LazyReportsView, ScreenLoader } from './components/LazyScreens';
 import { ShieldCheck, User as UserIcon, Cloud, CloudOff, RefreshCw, FileSpreadsheet, Home, Download, Share, PlusSquare, X, Wifi, LogOut, ShieldAlert, AlertTriangle, Smartphone, Settings } from 'lucide-react';
 import { syncTimeWithServer, checkDeveloperOptionsStatus, getDeviceFingerprint } from './utils';
 import { LogoMark } from './components/Logo';
+import { postJson, SESSION_INVALID_CODES } from './api';
+
+/**
+ * ترحيل مفاتيح التخزين من بادئة `attendance_` إلى `cusfollow_`.
+ *
+ * البادئة القديمة من نظام الحضور الذي حلّ محلّه هذا التطبيق. تغييرها بلا
+ * ترحيل كان يُخرج كل موظف من حسابه ويمحو إعداداته المحلية.
+ *
+ * يُنفَّذ عند استيراد الوحدة — أي **قبل** أن تقرأ أي حالة من localStorage.
+ * ينسخ ولا يحذف: لو رجع المستخدم لنسخة أقدم من التطبيق لوجد بياناته.
+ */
+(function migrateLegacyStorageKeys() {
+  try {
+    ['config', 'branches', 'jobs', 'current_user'].forEach((k) => {
+      const oldKey = 'attendance_' + k;
+      const newKey = 'cusfollow_' + k;
+      if (localStorage.getItem(newKey) === null) {
+        const val = localStorage.getItem(oldKey);
+        if (val !== null) localStorage.setItem(newKey, val);
+      }
+    });
+
+    // نسخ قديمة كانت تحفظ على كل هاتف قائمة الموظفين كلها بكلمات مرورهم،
+    // وحسابات التقارير بكلمات مرورها. لم يعد التطبيق يستقبلها أصلاً،
+    // فتُمحى بقاياها من الأجهزة.
+    ['users', 'report_accounts'].forEach((k) => {
+      localStorage.removeItem('attendance_' + k);
+      localStorage.removeItem('cusfollow_' + k);
+    });
+  } catch (e) {
+    // تخزين محجوب أو ممتلئ — التطبيق يبدأ من الصفر ويعيد المزامنة
+  }
+})();
 
 // ==========================================
-// المصدر الرئيسي الوحيد لكلمة مرور المسؤول (Admin Password)
-// يمكنك تغييرها هنا مباشرة وسيتم تحديثها تلقائياً في كل التطبيق
-const ADMIN_PASSWORD_SSOT = 'Ba522129';
+// كلمة مرور المسؤول لم تعد مكتوبة هنا.
+//
+// كانت مشحونة في حزمة JS العلنية، فيقرؤها أي شخص يفتح مصدر الصفحة ثم
+// يطلب بها كل البيانات. المرجع الوحيد الآن شيت Config في الخادم:
+// المسؤول يكتبها عند الدخول، ويتحقّق منها الخادم، وتبقى في ذاكرة الجلسة
+// (sessionStorage) حتى إغلاق نافذة المتصفح — لا في localStorage.
+const ADMIN_SESSION_KEY = 'cusfollow_admin_session';
+
+const readAdminSession = (): { username: string; password: string } | null => {
+  try {
+    const raw = sessionStorage.getItem(ADMIN_SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && parsed.password ? parsed : null;
+  } catch (e) {
+    return null;
+  }
+};
+
+/**
+ * مهلة المزامنة العادية (فتح التطبيق · زر التحديث · عودة الاتصال).
+ * بدونها تعلّق الشبكة الضعيفة — لا المنقطعة — الطلبَ بلا نهاية.
+ */
+const SYNC_TIMEOUT_MS = 30000;
 
 /**
  * مهلة مزامنة التحقّق.
@@ -36,7 +89,15 @@ const App: React.FC = () => {
   const [visitReasons, setVisitReasons] = useState<VisitReason[]>([]);
   /** الزيارات المفتوحة على الخادم — شاشة الموظف تستعيد منها زيارته */
   const [openVisits, setOpenVisits] = useState<Visit[]>([]);
+  /**
+   * لحظة **بدء** الطلب الذي جاءت منه openVisits (لا لحظة وصوله).
+   * شاشة الموظف تتجاهل أي لقطة بدأ طلبها قبل آخر أمر زيارة أرسلته —
+   * فتلك لقطة لما قبل الأمر، وتطبيقها كان يُخفي الزيارة ثم يُظهرها.
+   */
+  const [openVisitsAsOf, setOpenVisitsAsOf] = useState<number | undefined>(undefined);
   const [customerRadius, setCustomerRadius] = useState<number>(100);
+  /** رسالة تظهر في شاشة الدخول بعد إخراج المستخدم لسبب من الخادم */
+  const [loginNotice, setLoginNotice] = useState('');
 
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncError, setSyncError] = useState(false);
@@ -81,25 +142,36 @@ const App: React.FC = () => {
   }, []);
 
   const [config, setConfig] = useState<AppConfig>(() => {
-    const saved = localStorage.getItem('attendance_config');
-    const defaultConfig = { 
+    const saved = localStorage.getItem('cusfollow_config');
+    const session = readAdminSession();
+    const defaultConfig: AppConfig = {
       googleSheetLink: '',
       syncUrl: '',
       auditLogUrl: '',
       adminUsername: 'admin',
-      adminPassword: ADMIN_PASSWORD_SSOT
+      adminPassword: ''
     };
+    let cfg = defaultConfig;
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        // Always force adminPassword to be the ADMIN_PASSWORD_SSOT from the code, ignoring any saved password
-        return { ...defaultConfig, ...parsed, adminPassword: ADMIN_PASSWORD_SSOT };
+        // كلمة مرور محفوظة من نسخة قديمة لا يُعتدّ بها
+        cfg = { ...defaultConfig, ...parsed, adminPassword: '' };
       } catch (e) {
-        return defaultConfig;
+        cfg = defaultConfig;
       }
     }
-    return defaultConfig;
+    if (session) cfg = { ...cfg, adminUsername: session.username, adminPassword: session.password };
+    return cfg;
   });
+
+  // مراجع تقرؤها المزامنة وقت التنفيذ — فتبقى دالتها ثابتة لا تُعاد صناعتها
+  // مع كل تغيّر في الحالة. إعادة صناعتها كانت تُطلق التأثيرات المعتمدة عليها.
+  const currentUserRef = useRef<User | null>(null);
+  const configRef = useRef<AppConfig>(config);
+  const syncSeqRef = useRef(0);
+  useEffect(() => { configRef.current = config; }, [config]);
+  useEffect(() => { currentUserRef.current = currentUser; }, [currentUser]);
 
   useEffect(() => {
     // Android Install Prompt
@@ -146,100 +218,157 @@ const App: React.FC = () => {
     }
   };
 
+  /** يطبّق بيانات الموظف القادمة من الخادم (login أو getMyData) */
+  const applyEmployeeData = useCallback((data: any, requestStartedAt: number, url?: string) => {
+    if (Array.isArray(data.customers)) {
+      setCustomers(data.customers);
+      try { localStorage.setItem('uniteam_customers', JSON.stringify(data.customers)); } catch (e) {}
+    }
+    if (Array.isArray(data.visitReasons)) {
+      setVisitReasons(data.visitReasons);
+      try { localStorage.setItem('uniteam_visit_reasons', JSON.stringify(data.visitReasons)); } catch (e) {}
+    }
+    // الزيارات المفتوحة لا تُخزَّن محلياً: الخادم وحده مرجعها
+    if (Array.isArray(data.openVisits)) {
+      setOpenVisits(data.openVisits);
+      setOpenVisitsAsOf(requestStartedAt);
+    }
+    if (data.customerRadius && !isNaN(Number(data.customerRadius))) {
+      setCustomerRadius(Number(data.customerRadius));
+    }
+    if (data.user && data.user.id) {
+      // لا يُستبدل الكائن إلا إن تغيّر فعلاً. كان يُستبدل مع كل مزامنة،
+      // وكان تأثير المزامنة معتمداً عليه فيُطلق مزامنة جديدة — حلقة لا تتوقف.
+      const prev = currentUserRef.current;
+      const next: User = { ...data.user, role: 'employee' };
+      if (!prev || JSON.stringify(prev) !== JSON.stringify(next)) {
+        currentUserRef.current = next;
+        setCurrentUser(next);
+        try { localStorage.setItem('cusfollow_current_user', JSON.stringify(next)); } catch (e) {}
+      }
+    }
+    setConfig(prev => {
+      const updated: AppConfig = { ...prev, lastUpdated: new Date().toISOString() };
+      if (url) { updated.syncUrl = url; updated.googleSheetLink = url; }
+      if (data.customerRadius && !isNaN(Number(data.customerRadius))) {
+        updated.defaultCustomerRadius = Number(data.customerRadius);
+      }
+      const { adminPassword, ...configToSave } = updated;
+      try { localStorage.setItem('cusfollow_config', JSON.stringify(configToSave)); } catch (e) {}
+      return updated;
+    });
+  }, []);
+
+  /** يطبّق بيانات لوحة الإدارة (getAdminData) */
+  const applyAdminData = useCallback((data: any, requestStartedAt: number, url?: string) => {
+    if (Array.isArray(data.branches)) setBranches(data.branches);
+    if (Array.isArray(data.jobs)) setJobs(data.jobs);
+    // الموظفون وحسابات التقارير تحمل كلمات مرور — تبقى في الذاكرة ولا تُحفظ
+    if (Array.isArray(data.users)) setAllUsers(data.users);
+    if (Array.isArray(data.reportAccounts)) setReportAccounts(data.reportAccounts);
+    if (Array.isArray(data.customers)) setCustomers(data.customers);
+    if (Array.isArray(data.visitReasons)) setVisitReasons(data.visitReasons);
+    if (Array.isArray(data.openVisits)) {
+      setOpenVisits(data.openVisits);
+      setOpenVisitsAsOf(requestStartedAt);
+    }
+    if (data.customerRadius && !isNaN(Number(data.customerRadius))) {
+      setCustomerRadius(Number(data.customerRadius));
+    }
+    setConfig(prev => {
+      const updated: AppConfig = { ...prev, lastUpdated: new Date().toISOString() };
+      if (url) { updated.syncUrl = url; updated.googleSheetLink = url; }
+      if (data.customerRadius && !isNaN(Number(data.customerRadius))) {
+        updated.defaultCustomerRadius = Number(data.customerRadius);
+      }
+      const { adminPassword, ...configToSave } = updated;
+      try { localStorage.setItem('cusfollow_config', JSON.stringify(configToSave)); } catch (e) {}
+      return updated;
+    });
+  }, []);
+
+  /** إخراج المستخدم إلى شاشة الدخول مع سبب يراه */
+  const forceLogout = useCallback((notice: string) => {
+    try {
+      localStorage.removeItem('cusfollow_current_user');
+      sessionStorage.removeItem(ADMIN_SESSION_KEY);
+    } catch (e) {}
+    currentUserRef.current = null;
+    setCurrentUser(null);
+    setAllUsers([]);
+    setReportAccounts([]);
+    setConfig(prev => ({ ...prev, adminPassword: '' }));
+    setActiveView('main');
+    setLoginNotice(notice);
+  }, []);
+
   /**
-   * مزامنة بيانات النظام من جوجل شيت.
+   * مزامنة بيانات المستخدم الحالي من الخادم.
    *
-   * **تُعيد البيانات المجلوبة** (أو null عند أي تعذّر). كانت لا تُعيد شيئاً،
-   * فمن يناديها لا يستطيع استعمال النتيجة فوراً — وحالة React لا تُحدَّث
-   * تزامنياً. شاشة الدخول تحتاج القائمة الطازجة في نفس اللحظة لا في العرض
-   * التالي، وإلا تحقّقت من نسخة قديمة.
+   * الموظف يطلب getMyData بهويته فيصله سجلّه وعملاء توكيله وزيارته
+   * المفتوحة فقط. المسؤول يطلب getAdminData بكلمة مروره. بلا مستخدم
+   * مسجَّل لا مزامنة أصلاً — لا شيء يُسلَّم لمجهول.
    *
-   * @param timeoutMs مهلة اختيارية. بدونها تعلّق الشبكة الضعيفة — لا المنقطعة —
-   *   الطلبَ بلا نهاية، فيتجمّد زر الدخول أمام الموظف.
+   * **تُعيد البيانات** (أو null عند أي تعذّر) — شاشة الموظف تحتاجها فوراً
+   * بعد فشل غامض لتسأل الخادم عن حال زيارتها.
+   *
+   * @param timeoutMs  مهلة الطلب
+   * @param urlOverride رابط بديل (رابط جديد من server-config.json مثلاً)
    */
   const syncWithCloud = useCallback(async (
-    url: string,
-    force: boolean = false,
-    timeoutMs?: number
+    timeoutMs: number = SYNC_TIMEOUT_MS,
+    urlOverride?: string
   ): Promise<any | null> => {
-    if (!url || !url.startsWith('http')) return null;
-    // Don't sync if offline
+    const url = urlOverride || configRef.current.syncUrl;
+    const user = currentUserRef.current;
+    if (!url || !url.startsWith('http') || !user) return null;
     if (!navigator.onLine) {
-       setSyncError(true);
-       return null;
+      setSyncError(true);
+      return null;
     }
 
+    const seq = ++syncSeqRef.current;
+    const startedAt = Date.now();
     setIsSyncing(true);
     setSyncError(false);
-
-    const controller = timeoutMs ? new AbortController() : null;
-    const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
 
     try {
       // مزامنة الوقت بالخلفية لضمان دقة ساعة التطبيق بالتوقيت المصري وحمايته من التلاعب
       syncTimeWithServer().catch(e => console.warn('Background time sync failed', e));
 
-      const fetchUrl = `${url}${url.includes('?') ? '&' : '?'}action=getData&t=${Date.now()}`;
-      const response = await fetch(fetchUrl, controller ? { signal: controller.signal } : undefined);
-      if (!response.ok) throw new Error('فشل الاتصال');
-      const data = await response.json();
-      
-      if (data.branches) {
-        setBranches(data.branches);
-        localStorage.setItem('attendance_branches', JSON.stringify(data.branches));
-      }
-      if (data.jobs) {
-        setJobs(data.jobs);
-        localStorage.setItem('attendance_jobs', JSON.stringify(data.jobs));
-      }
-      if (data.reportAccounts) {
-        setReportAccounts(data.reportAccounts);
-        localStorage.setItem('attendance_report_accounts', JSON.stringify(data.reportAccounts));
-      }
-      if (data.users && Array.isArray(data.users)) {
-        setAllUsers(data.users);
-        localStorage.setItem('attendance_users', JSON.stringify(data.users));
-        
-        // Update current user if already logged in (using functional update to avoid stale closure)
-        setCurrentUser(prev => {
-          if (prev && prev.role !== 'admin') {
-            const updatedUser = data.users.find((u: User) => u.id === prev.id);
-            if (updatedUser) {
-              localStorage.setItem('attendance_current_user', JSON.stringify(updatedUser));
-              return updatedUser;
-            }
+      const payload = user.role === 'admin'
+        ? {
+            action: 'getAdminData',
+            adminUsername: configRef.current.adminUsername,
+            adminPassword: configRef.current.adminPassword
           }
-          return prev;
-        });
-      }
-      // ---------- متابعة العملاء ----------
-      if (Array.isArray(data.customers)) {
-        setCustomers(data.customers);
-        localStorage.setItem('uniteam_customers', JSON.stringify(data.customers));
-      }
-      if (Array.isArray(data.visitReasons)) {
-        setVisitReasons(data.visitReasons);
-        localStorage.setItem('uniteam_visit_reasons', JSON.stringify(data.visitReasons));
-      }
-      // الزيارات المفتوحة لا تُخزَّن محلياً: الخادم وحده مرجعها، وأي نسخة
-      // محلية قديمة قد تُظهر زيارة أُغلقت من جهاز آخر.
-      if (Array.isArray(data.openVisits)) {
-        setOpenVisits(data.openVisits);
-      }
-      if (data.customerRadius && !isNaN(Number(data.customerRadius))) {
-        setCustomerRadius(Number(data.customerRadius));
-      }
-      
-      setConfig(prev => {
-        const updatedConfig = { ...prev, lastUpdated: new Date().toISOString(), syncUrl: url, googleSheetLink: url };
-        if (data.customerRadius && !isNaN(Number(data.customerRadius))) {
-          updatedConfig.defaultCustomerRadius = Number(data.customerRadius);
-        }
-        const { adminPassword, ...configToSave } = updatedConfig;
-        localStorage.setItem('attendance_config', JSON.stringify(configToSave));
-        return updatedConfig;
-      });
+        : {
+            action: 'getMyData',
+            nationalId: user.nationalId,
+            password: user.password,
+            deviceId: getDeviceFingerprint()
+          };
 
+      const data = await postJson(url, payload, timeoutMs);
+
+      // خرج المستخدم أو تبدّل أثناء الطلب — الردّ لم يعد يخصّ أحداً
+      const now = currentUserRef.current;
+      if (!now || now.id !== user.id || now.role !== user.role) return null;
+
+      if (!data || data.status !== 'ok') {
+        setSyncError(true);
+        if (data && SESSION_INVALID_CODES.includes(data.code)) {
+          forceLogout(data.message || 'انتهت صلاحية الدخول. سجّل الدخول من جديد.');
+        }
+        return null;
+      }
+
+      // طلب أحدث بدأ بعد هذا — نتيجته هي المرجع، فلا نطبّق هذه فوقها.
+      // لكنها تُعاد لمن طلبها: جوابها صحيح للحظة التي سأل فيها.
+      if (seq === syncSeqRef.current) {
+        if (user.role === 'admin') applyAdminData(data, startedAt, url);
+        else applyEmployeeData(data, startedAt, url);
+      }
       return data;
     } catch (err) {
       setSyncError(true);
@@ -250,36 +379,51 @@ const App: React.FC = () => {
       }
       return null;
     } finally {
-      if (timer) clearTimeout(timer);
-      setIsSyncing(false);
+      if (seq === syncSeqRef.current) setIsSyncing(false);
     }
-  }, []); // No dependencies to avoid infinite loops
+  }, [applyAdminData, applyEmployeeData, forceLogout]);
 
-  // Initial Data Load
+  // التحميل الأول
   useEffect(() => {
     // مزامنة الوقت فور تشغيل التطبيق
     syncTimeWithServer().catch(e => console.warn('On-load time sync failed', e));
 
-    const savedUser = localStorage.getItem('attendance_current_user');
-    const savedBranches = localStorage.getItem('attendance_branches');
-    const savedJobs = localStorage.getItem('attendance_jobs');
-    const savedUsers = localStorage.getItem('attendance_users');
-    const savedReportAccounts = localStorage.getItem('attendance_report_accounts');
-    
-    if (savedUser) setCurrentUser(JSON.parse(savedUser));
-    if (savedBranches) setBranches(JSON.parse(savedBranches));
-    if (savedJobs) setJobs(JSON.parse(savedJobs));
-    if (savedUsers) setAllUsers(JSON.parse(savedUsers));
-    if (savedReportAccounts) setReportAccounts(JSON.parse(savedReportAccounts));
+    const savedBranches = localStorage.getItem('cusfollow_branches');
+    const savedJobs = localStorage.getItem('cusfollow_jobs');
+    try {
+      if (savedBranches) setBranches(JSON.parse(savedBranches));
+      if (savedJobs) setJobs(JSON.parse(savedJobs));
+    } catch (e) {}
 
     // قائمة العملاء والأسباب تعمل بلا اتصال — الموظف يرى عملاءه ويبحث
     // فيهم قبل أن تصل المزامنة، ولا يفتح زيارة إلا والشبكة قائمة.
-    const savedCustomers = localStorage.getItem('uniteam_customers');
-    const savedReasons = localStorage.getItem('uniteam_visit_reasons');
-    if (savedCustomers) setCustomers(JSON.parse(savedCustomers));
-    if (savedReasons) setVisitReasons(JSON.parse(savedReasons));
-    
-    // Check URL params for cloud link
+    try {
+      const savedCustomers = localStorage.getItem('uniteam_customers');
+      const savedReasons = localStorage.getItem('uniteam_visit_reasons');
+      if (savedCustomers) setCustomers(JSON.parse(savedCustomers));
+      if (savedReasons) setVisitReasons(JSON.parse(savedReasons));
+    } catch (e) {}
+
+    // استعادة الجلسة. جلسة المسؤول لا تُستعاد إلا وكلمة مروره في ذاكرة
+    // هذه النافذة — وإلا فلا وسيلة لطلب بياناته، فيعود لشاشة الدخول.
+    let restored: User | null = null;
+    try {
+      const savedUser = localStorage.getItem('cusfollow_current_user');
+      if (savedUser) {
+        const parsed: User = JSON.parse(savedUser);
+        if (parsed.role === 'admin' && !readAdminSession()) {
+          localStorage.removeItem('cusfollow_current_user');
+        } else {
+          restored = parsed;
+        }
+      }
+    } catch (e) {}
+    if (restored) {
+      currentUserRef.current = restored;
+      setCurrentUser(restored);
+    }
+
+    // رابط الخادم ممرَّر في الرابط (?c=...)
     const params = new URLSearchParams(window.location.search);
     const cloudUrlEncoded = params.get('c');
     let urlToSync = config.syncUrl;
@@ -290,38 +434,43 @@ const App: React.FC = () => {
         if (decodedUrl.startsWith('http')) {
           urlToSync = decodedUrl;
           window.history.replaceState({}, document.title, window.location.pathname);
+          setConfig(prev => {
+            const updated = { ...prev, syncUrl: decodedUrl, googleSheetLink: decodedUrl };
+            const { adminPassword, ...configToSave } = updated;
+            try { localStorage.setItem('cusfollow_config', JSON.stringify(configToSave)); } catch (e) {}
+            return updated;
+          });
         }
       } catch (e) {}
     }
 
-    if (urlToSync) {
-      syncWithCloud(urlToSync);
+    // مزامنة واحدة عند الفتح — لمن سجّل دخوله فقط
+    if (urlToSync && restored) {
+      syncWithCloud(SYNC_TIMEOUT_MS, urlToSync);
     }
   }, []);
 
-  // Continuous Auto-Reconnect & Periodic Sync
+  /**
+   * مزامنة واحدة عند **عودة** الاتصال بعد انقطاعه — للموظف فقط.
+   *
+   * لا مزامنة دورية بعد اليوم. كانت هنا مزامنة كل خمس دقائق، وتأثير يعتمد
+   * على currentUser — والمزامنة نفسها تستبدل currentUser بنسخة جديدة،
+   * فيُطلق التأثير مزامنة أخرى فوراً: حلقة لا تتوقف ما دام الموظف داخلاً.
+   * هي التي كانت تُظهر «مزامنة» أعلى الشاشة بلا انقطاع وتُثقل التطبيق
+   * والخادم معاً، وتُخفي الزيارة المفتوحة ثم تُظهرها.
+   *
+   * البيانات تُحدَّث الآن: عند فتح التطبيق · بعد الدخول · بزر «تحديث» ·
+   * بعد كل أمر زيارة · وعند عودة الاتصال. كل فحوص الأمان في الخادم
+   * (الجهاز · الموقع · التكرار) تعمل عند كل أمر زيارة ولا علاقة لها بالمزامنة.
+   */
+  const wasOnlineRef = useRef(navigator.onLine);
   useEffect(() => {
-     if (!config.syncUrl) return;
-
-     // STOP Auto-Sync for Admin to allow local editing without overwrites
-     if (currentUser?.role === 'admin') return;
-
-     // 1. Sync immediately when coming back online
-     if (isOnline) {
-       syncWithCloud(config.syncUrl);
-     }
-
-     // 2. مزامنة دورية كل خمس دقائق ما دام الاتصال قائماً (لغير المسؤول).
-     //    خمس دقائق لا ثوانٍ: الخادم Google Apps Script له حصص استدعاء
-     //    محدودة، و٤٨ موظفاً يستدعون كل ثانيتين يستنفدونها سريعاً.
-     const intervalId = setInterval(() => {
-       if (navigator.onLine) {
-         syncWithCloud(config.syncUrl);
-       }
-     }, 300000);
-
-     return () => clearInterval(intervalId);
-  }, [isOnline, config.syncUrl, syncWithCloud, currentUser]);
+    const cameBack = isOnline && !wasOnlineRef.current;
+    wasOnlineRef.current = isOnline;
+    if (cameBack && currentUserRef.current?.role === 'employee') {
+      syncWithCloud();
+    }
+  }, [isOnline, syncWithCloud]);
 
   // Check for global updates from GitHub static file
   // تفعيل فوري لشاشة الصيانة حين تكتشفها شاشة الموظف لحظة الضغط على
@@ -425,7 +574,7 @@ const App: React.FC = () => {
           checkApkUpdate(data);
 
           if (data && data.googleSheetLink && data.googleSheetLink.startsWith('http')) {
-            const saved = localStorage.getItem('attendance_config');
+            const saved = localStorage.getItem('cusfollow_config');
             const currentConfig = saved ? JSON.parse(saved) : null;
             
             const hasChanges = !currentConfig || 
@@ -441,10 +590,10 @@ const App: React.FC = () => {
                   auditLogUrl: data.auditLogUrl !== undefined ? data.auditLogUrl : prev.auditLogUrl
                 };
                 const { adminPassword, ...configToSave } = updatedConfig;
-                localStorage.setItem('attendance_config', JSON.stringify(configToSave));
+                localStorage.setItem('cusfollow_config', JSON.stringify(configToSave));
                 return updatedConfig;
               });
-              syncWithCloud(data.googleSheetLink);
+              syncWithCloud(SYNC_TIMEOUT_MS, data.googleSheetLink);
             }
           }
         }
@@ -458,8 +607,8 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [syncWithCloud]);
 
-  useEffect(() => { localStorage.setItem('attendance_branches', JSON.stringify(branches)); }, [branches]);
-  useEffect(() => { localStorage.setItem('attendance_jobs', JSON.stringify(jobs)); }, [jobs]);
+  useEffect(() => { localStorage.setItem('cusfollow_branches', JSON.stringify(branches)); }, [branches]);
+  useEffect(() => { localStorage.setItem('cusfollow_jobs', JSON.stringify(jobs)); }, [jobs]);
 
   const logAction = useCallback(async (action: string, details: string = '') => {
     if (!config.syncUrl || !navigator.onLine) return;
@@ -485,25 +634,67 @@ const App: React.FC = () => {
     }
   }, [config.syncUrl, config.auditLogUrl, currentUser]);
 
-  const handleLogin = (user: User) => {
+  /**
+   * دخول ناجح تحقّق منه الخادم.
+   *
+   * @param data   ردّ الخادم نفسه (login أو getAdminData) — يُطبَّق فوراً
+   *               فلا حاجة لطلب ثانٍ بعد الدخول
+   * @param admin  بيانات المسؤول — تُحفظ في ذاكرة هذه النافذة فقط
+   */
+  const handleLogin = (
+    user: User,
+    data: any,
+    requestStartedAt: number,
+    admin?: { username: string; password: string }
+  ) => {
+    setLoginNotice('');
+    // طلب قديم ما زال في الطريق لا يُطبَّق فوق بيانات الدخول
+    syncSeqRef.current++;
+    setIsSyncing(false);
+
+    if (user.role === 'admin' && admin) {
+      try { sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(admin)); } catch (e) {}
+      const nextConfig = { ...configRef.current, adminUsername: admin.username, adminPassword: admin.password };
+      configRef.current = nextConfig;
+      setConfig(nextConfig);
+    }
+
+    currentUserRef.current = user;
     setCurrentUser(user);
-    localStorage.setItem('attendance_current_user', JSON.stringify(user));
+    try { localStorage.setItem('cusfollow_current_user', JSON.stringify(user)); } catch (e) {}
+
+    if (data) {
+      if (user.role === 'admin') applyAdminData(data, requestStartedAt);
+      else applyEmployeeData(data, requestStartedAt);
+    }
   };
 
   const handleLogout = () => {
     if (currentUser) {
       logAction('تسجيل خروج', `المستخدم: ${currentUser.fullName} (${currentUser.role})`);
     }
-    localStorage.removeItem('attendance_current_user');
+    syncSeqRef.current++;
+    setIsSyncing(false);
+    try {
+      localStorage.removeItem('cusfollow_current_user');
+      sessionStorage.removeItem(ADMIN_SESSION_KEY);
+    } catch (e) {}
+    currentUserRef.current = null;
     setCurrentUser(null);
+    setAllUsers([]);
+    setReportAccounts([]);
+    setOpenVisits([]);
+    setOpenVisitsAsOf(undefined);
+    setConfig(prev => ({ ...prev, adminPassword: '' }));
     setActiveView('main');
   };
 
   const handleUpdateConfig = (newCfg: Partial<AppConfig>) => {
-    const cfg = { ...config, ...newCfg, adminPassword: ADMIN_PASSWORD_SSOT };
+    // كلمة مرور المسؤول لا تُغيَّر من هنا ولا تُحفظ على القرص
+    const cfg = { ...config, ...newCfg, adminPassword: config.adminPassword };
     setConfig(cfg);
     const { adminPassword, ...configToSave } = cfg;
-    localStorage.setItem('attendance_config', JSON.stringify(configToSave));
+    localStorage.setItem('cusfollow_config', JSON.stringify(configToSave));
   };
 
   // Determine if we should show an install button (Android or iOS web)
@@ -546,7 +737,7 @@ const App: React.FC = () => {
             <LogoMark size={38} />
             <div className="leading-none">
               <div className="flex items-center gap-2">
-                <h1 className="ut-brand" style={{ fontSize: 19 }}>Uniteam</h1>
+                <h1 className="ut-brand" style={{ fontSize: 19 }}>Cust Follow</h1>
                 {isSyncing ? (
                   <span className="ut-chip ut-chip--brand">
                     <RefreshCw size={11} className="animate-spin" /> مزامنة
@@ -566,16 +757,16 @@ const App: React.FC = () => {
                 )}
               </div>
               <p className="ut-header__sub text-[11px] mt-1">
-                {currentUser ? currentUser.fullName : 'Cus Follow · متابعة العملاء'}
+                {currentUser ? currentUser.fullName : 'متابعة العملاء'}
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            {config.syncUrl && (
+            {config.syncUrl && currentUser && (
               <button
                 onClick={() => {
-                  if (config.syncUrl) syncWithCloud(config.syncUrl, true);
+                  syncWithCloud();
                   logAction('تحديث البيانات', 'مزامنة يدوية من الهيدر');
                 }}
                 disabled={isSyncing}
@@ -641,7 +832,7 @@ const App: React.FC = () => {
             className="ut-install md:hidden w-full text-white py-3.5 min-h-[44px] text-sm font-bold flex justify-center items-center gap-2"
             style={{ borderRadius: 0 }}
           >
-            <Download size={16} /> {isIos ? 'تثبيت Uniteam على الآيفون' : 'تثبيت Uniteam على هاتفك'}
+            <Download size={16} /> {isIos ? 'تثبيت Cust Follow على الآيفون' : 'تثبيت Cust Follow على هاتفك'}
           </button>
         )}
 
@@ -718,27 +909,31 @@ const App: React.FC = () => {
 
       <main className={`flex-1 w-full mx-auto pb-24 ${currentUser?.role === 'admin' ? 'admin-wide py-4 md:py-6' : 'max-w-6xl p-4 md:p-6'}`}>
         {activeView === 'reports' && !currentUser ? (
-          <ReportsView syncUrl={config.syncUrl} adminConfig={config} onUpdateConfig={handleUpdateConfig} logAction={logAction} />
+          <ScreenLoader>
+            <LazyReportsView syncUrl={config.syncUrl} adminConfig={config} onUpdateConfig={handleUpdateConfig} logAction={logAction} />
+          </ScreenLoader>
         ) : (
           !currentUser ? (
             <Login
-              onLogin={handleLogin} allUsers={allUsers} adminConfig={config} availableJobs={jobs}
-              branches={branches}
+              onLogin={handleLogin}
+              adminConfig={config}
               setAdminConfig={handleUpdateConfig}
               logAction={logAction}
-              onSync={syncWithCloud}
               onOpenReports={() => setActiveView('reports')}
+              notice={loginNotice}
             />
           ) : (
             currentUser.role === 'admin' ? (
-              <AdminDashboard 
-                branches={branches} setBranches={setBranches} jobs={jobs} setJobs={setJobs}
-                config={config} setConfig={setConfig} allUsers={allUsers} setAllUsers={setAllUsers}
-                reportAccounts={reportAccounts} setReportAccounts={setReportAccounts}
-                customers={customers} setCustomers={setCustomers}
-                onRefresh={() => syncWithCloud(config.syncUrl)} isSyncing={isSyncing}
-                logAction={logAction}
-              />
+              <ScreenLoader>
+                <LazyAdminDashboard
+                  branches={branches} setBranches={setBranches} jobs={jobs} setJobs={setJobs}
+                  config={config} setConfig={setConfig} allUsers={allUsers} setAllUsers={setAllUsers}
+                  reportAccounts={reportAccounts} setReportAccounts={setReportAccounts}
+                  customers={customers} setCustomers={setCustomers}
+                  onRefresh={() => syncWithCloud()} isSyncing={isSyncing}
+                  logAction={logAction}
+                />
+              </ScreenLoader>
             ) : (
               <UserDashboard
                 user={currentUser}
@@ -747,8 +942,9 @@ const App: React.FC = () => {
                 openVisits={openVisits}
                 customerRadius={customerRadius}
                 googleSheetLink={config.googleSheetLink}
-                onRefresh={() => syncWithCloud(config.syncUrl, true, VERIFY_SYNC_TIMEOUT_MS)}
+                onRefresh={() => syncWithCloud(VERIFY_SYNC_TIMEOUT_MS)}
                 isSyncing={isSyncing} lastUpdated={config.lastUpdated}
+                openVisitsAsOf={openVisitsAsOf}
                 logAction={logAction}
               />
             )
@@ -756,8 +952,8 @@ const App: React.FC = () => {
         )}
       </main>
       
-      <footer className="py-4 text-center relative z-10 text-slate-900 text-[10px] font-bold pb-6">
-        <p>Uniteam &copy; 2026</p>
+      <footer className="py-4 text-center relative z-10 text-slate-500 text-[10px] font-bold pb-6">
+        <p>Cust Follow &copy; 2026</p>
         <p className="mt-0.5 opacity-70">RTM Team - Bahaa Mohamed-Tel: 01095665450</p>
       </footer>
 
@@ -833,7 +1029,7 @@ const App: React.FC = () => {
             <p>1. افتح "إعدادات الهاتف" (Settings).</p>
             <p>2. اذهب إلى "خيارات المطور" (Developer Options) أو "النظام".</p>
             <p>3. قم بـ **إيقاف/تعطيل** خيارات المطور (Developer Options Off).</p>
-            <p>4. عد لتطبيق Uniteam واضغط إعادة الفحص بالأسفل.</p>
+            <p>4. عد لتطبيق Cust Follow واضغط إعادة الفحص بالأسفل.</p>
           </div>
           {/* التدرّج مكتوب هنا لا عبر bg-red-600: skin.css يفرض على
               button.bg-red-600 تدرّجاً يبدأ بـ #EF4444 بـ !important، والأبيض

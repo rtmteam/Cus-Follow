@@ -1,18 +1,19 @@
 
+/**
+ * التوكيل الذي يتبعه الموظف — ويُسمّى «الفرع» في الواجهة.
+ *
+ * قائمة أسماء وأكواد لا أكثر — بلا إحداثيات ولا نطاق.
+ * التحقق الجغرافي يتم عند **العميل** لا عند التوكيل (Customer.radius).
+ */
 export interface Branch {
   id: string;
   code?: string;
   name: string;
-  latitude: number;
-  longitude: number;
-  radius: number;
 }
 
 export interface Job {
   id: string;
   title: string;
-  workingDays?: number[];
-  canVisitMultipleBranches?: boolean; // New: Allow this job to have visit plans
 }
 
 export interface User {
@@ -21,13 +22,17 @@ export interface User {
   nationalId: string;
   serialNumber?: string; // الرقم التسلسلي الجديد (السنة + الترتيب)
   password?: string;
-  employeeId?: string;
   role: 'employee' | 'admin';
   deviceId?: string; // Legacy support
   deviceIds?: string[]; // New: Array of linked device IDs
   allowedDeviceCount?: number; // New: Limit of devices per user
   jobTitle?: string;
-  defaultBranchId?: string; 
+  /**
+   * التوكيل الذي يتبعه الموظف — وعليه يُبنى أي العملاء يراهم.
+   * الأسماء الأربعة بقايا صيغ قديمة، وUserDashboard يقرأها بالترتيب
+   * لأن بيانات الشيت مُلئت على مراحل ولا تأتي متطابقة.
+   */
+  defaultBranchId?: string;
   defaultBranch?: string;
   assignedBranch?: string;
   branch?: string;

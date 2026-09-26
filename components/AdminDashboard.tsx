@@ -29,9 +29,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onRefresh, isSyncing, logAction
 }) => {
   const [activeTab, setActiveTab] = useState<'branches' | 'jobs' | 'users' | 'customers' | 'report-access' | 'reports' | 'settings'>('branches');
-  const [newBranch, setNewBranch] = useState<Partial<Branch>>({ code: '', name: '', latitude: 0, longitude: 0, radius: 100 });
+  const [newBranch, setNewBranch] = useState<Partial<Branch>>({ code: '', name: '' });
   const [newJobTitle, setNewJobTitle] = useState('');
-  const [newHoliday, setNewHoliday] = useState('');
   const [isPushing, setIsPushing] = useState(false);
   
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
@@ -88,6 +87,99 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       logAction('فشل إعادة تعيين كلمة مرور', `الموظف: ${user.fullName} | خطأ اتصال`);
     } finally {
       setResettingUserId(null);
+    }
+  };
+
+  // ---------- إضافة موظف ----------
+  // الحسابات يُنشئها المسؤول وحده. الموظف يدخل بها، ويُربط هاتفه عند أول دخول.
+  const emptyEmployee = { fullName: '', nationalId: '', password: '', jobTitle: '', agency: '', allowedDeviceCount: 1 };
+  const [newEmp, setNewEmp] = useState(emptyEmployee);
+  const [addingEmp, setAddingEmp] = useState(false);
+
+  /** التوكيلات المعروفة — من قائمة الفروع ومن أكواد العملاء وأسمائهم */
+  const agencyOptions = Array.from(new Set(
+    [
+      ...branches.map(b => (b.name || '').trim()),
+      ...branches.map(b => (b.code || '').toString().trim()),
+      ...customers.map(c => (c.agencyCode || '').toString().trim()),
+      ...customers.map(c => (c.agencyName || '').toString().trim())
+    ].filter(Boolean)
+  ));
+
+  /** كم عميلاً سيراه الموظف بهذا التوكيل — نفس قاعدة المطابقة في الخادم */
+  const countAgencyCustomers = (agency: string) => {
+    const t = agency.trim().toLowerCase();
+    if (!t) return 0;
+    return customers.filter(c =>
+      String(c.agencyCode ?? '').trim().toLowerCase() === t ||
+      String(c.agencyName ?? '').trim().toLowerCase() === t
+    ).length;
+  };
+
+  const addEmployee = async () => {
+    if (!config.syncUrl) { alert('يرجى ضبط رابط المزامنة أولاً'); return; }
+    const fullName = newEmp.fullName.trim();
+    const nid = newEmp.nationalId.trim();
+    const pass = newEmp.password.trim();
+    const agency = newEmp.agency.trim();
+
+    if (!fullName || !nid || !pass || !newEmp.jobTitle || !agency) {
+      alert('أكمل البيانات: الاسم · الرقم القومي · كلمة المرور · الوظيفة · التوكيل.');
+      return;
+    }
+    if (!/^\d{14}$/.test(nid)) { alert('الرقم القومي يجب أن يكون ١٤ رقماً.'); return; }
+    if (pass.length < 6) { alert('كلمة المرور يجب ألا تقل عن ٦ خانات.'); return; }
+    if (pass.startsWith('0')) { alert('كلمة المرور لا يمكن أن تبدأ بصفر.'); return; }
+    if (allUsers.some(u => String(u.nationalId).trim() === nid)) {
+      alert('هذا الرقم القومي مسجّل بالفعل لموظف آخر.');
+      return;
+    }
+
+    const newUser: User = {
+      id: Math.random().toString(36).substr(2, 9),
+      fullName,
+      nationalId: nid,
+      password: pass,
+      role: 'employee',
+      deviceId: '',
+      deviceIds: [],
+      allowedDeviceCount: Math.max(1, Math.min(10, newEmp.allowedDeviceCount || 1)),
+      jobTitle: newEmp.jobTitle,
+      defaultBranchId: agency,
+      registrationDate: new Date().toISOString()
+    };
+
+    setAddingEmp(true);
+    try {
+      const response = await fetch(config.syncUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action: 'registerUser',
+          adminUsername: config.adminUsername,
+          adminPassword: config.adminPassword,
+          ...newUser
+        })
+      });
+      const text = (await response.text()).trim();
+
+      if (text.startsWith('User Registered Successfully')) {
+        const serial = text.split('|')[1] || '';
+        setAllUsers(prev => [...prev, { ...newUser, serialNumber: serial }]);
+        setNewEmp(emptyEmployee);
+        logAction('إضافة موظف', `الموظف: ${fullName} · التوكيل: ${agency}`);
+        alert(`أُضيف ${fullName} وحُفظ في السحابة.\n\nسلّمه الرقم القومي وكلمة المرور ليدخل من هاتفه، ويُربط هاتفه عند أول دخول.`);
+      } else if (text.includes('National ID Already Registered')) {
+        alert('هذا الرقم القومي مسجّل بالفعل على الخادم. اضغط «تحديث» لتظهر القائمة كاملة.');
+      } else {
+        alert('لم يُضف الموظف:\n\n' + text.replace(/^Error:\s*/, ''));
+        logAction('فشل إضافة موظف', `الموظف: ${fullName} | ${text}`);
+      }
+    } catch (err) {
+      alert('تعذّر الاتصال بالخادم. تأكد من الإنترنت ثم اضغط «تحديث» لترى هل أُضيف الموظف قبل إعادة المحاولة.');
+      logAction('فشل إضافة موظف', `الموظف: ${fullName} | خطأ اتصال`);
+    } finally {
+      setAddingEmp(false);
     }
   };
 
@@ -271,10 +363,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
 
     if (type === 'branches') {
-      data = [{ "كود الفرع": "101", "اسم الفرع": "الفرع الرئيسي", "خط العرض": 30.05, "خط الطول": 31.23, "النطاق بالمتر": 100 }];
+      data = [{ "كود الفرع": "101", "اسم الفرع": "الفرع الرئيسي" }];
       fileName = "template_branches.xlsx";
     } else if (type === 'jobs') {
-      data = [{ "اسم الوظيفة": "مهندس", "زيارة فروع متعددة": "نعم" }];
+      data = [{ "اسم الوظيفة": "مهندس" }];
       fileName = "template_jobs.xlsx";
     } else if (type === 'users') {
       data = [{
@@ -365,14 +457,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           setBranches(prev => [...prev, ...data.map((item: any) => ({
             id: Math.random().toString(36).substr(2, 9),
             code: (item["كود الفرع"] || item["كود"] || item["Code"] || item["code"] || '').toString().trim(),
-            name: item["اسم الفرع"] || 'فرع جديد',
-            latitude: parseFloat(item["خط العرض"] || 0),
-            longitude: parseFloat(item["خط الطول"] || 0),
-            radius: parseInt(item["النطاق بالمتر"] || 100)
-          }))]); 
+            name: item["اسم الفرع"] || 'فرع جديد'
+          }))]);
           logAction('استيراد فروع', `تم استيراد ${data.length} فرع من ملف إكسل`);
-        } else if (type === 'jobs') { 
-          setJobs(prev => [...prev, ...data.map((item: any) => ({ id: Math.random().toString(36).substr(2, 9), title: item["اسم الوظيفة"] || 'موظف', canVisitMultipleBranches: item["زيارة فروع متعددة"] === "نعم" }))]); 
+        } else if (type === 'jobs') {
+          setJobs(prev => [...prev, ...data.map((item: any) => ({ id: Math.random().toString(36).substr(2, 9), title: item["اسم الوظيفة"] || 'موظف' }))]);
           logAction('استيراد وظائف', `تم استيراد ${data.length} وظيفة من ملف إكسل`);
         } else if (type === 'users') {
           const existingNids = new Set(allUsers.map(u => u.nationalId));
@@ -504,7 +593,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <div className="admin-side__brand-icon"><Shield size={18} /></div>
             <div className="leading-none flex-1">
               <div className="admin-side__brand-name">لوحة الإدارة</div>
-              <div className="admin-side__brand-sub">Uniteam Admin</div>
+              <div className="admin-side__brand-sub">Cust Follow Admin</div>
             </div>
           </div>
 
@@ -563,6 +652,50 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <button onClick={() => userFileInputRef.current?.click()} className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white rounded-lg text-[10px] font-black transition-all"><FileSpreadsheet size={13}/> استيراد موظفين</button>
                </div>
              </div>
+             {/* ===== إضافة موظف — الطريق الوحيد لإنشاء حساب ===== */}
+             <div className="bg-slate-900/50 p-3.5 md:p-5 rounded-2xl border border-slate-700 space-y-3">
+               <div className="text-xs font-black text-slate-300 flex items-center gap-1.5">
+                 <Plus size={15} className="text-blue-400" /> إضافة موظف جديد
+               </div>
+               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                 <input type="text" placeholder="الاسم بالكامل" className={inputClasses} value={newEmp.fullName} onChange={e => setNewEmp({ ...newEmp, fullName: e.target.value })} />
+                 <input type="text" placeholder="الرقم القومي (١٤ رقماً)" inputMode="numeric" maxLength={14} className={inputClasses} value={newEmp.nationalId} onChange={e => setNewEmp({ ...newEmp, nationalId: e.target.value.replace(/\D/g, '') })} />
+                 <input type="text" placeholder="كلمة المرور (٦ خانات فأكثر)" className={inputClasses} value={newEmp.password} onChange={e => setNewEmp({ ...newEmp, password: e.target.value })} />
+                 <select className={inputClasses} value={newEmp.jobTitle} onChange={e => setNewEmp({ ...newEmp, jobTitle: e.target.value })}>
+                   <option value="">-- الوظيفة --</option>
+                   {jobs.map(j => <option key={j.id} value={j.title}>{j.title}</option>)}
+                 </select>
+                 <div>
+                   <input type="text" list="agency-options" placeholder="التوكيل (كود أو اسم)" className={inputClasses} value={newEmp.agency} onChange={e => setNewEmp({ ...newEmp, agency: e.target.value })} />
+                   <datalist id="agency-options">
+                     {agencyOptions.map(a => <option key={a} value={a} />)}
+                   </datalist>
+                   {newEmp.agency.trim() !== '' && (
+                     <p className={`text-[11px] font-bold mt-1 ${countAgencyCustomers(newEmp.agency) > 0 ? 'text-green-400' : 'text-orange-400'}`}>
+                       {countAgencyCustomers(newEmp.agency) > 0
+                         ? `سيرى ${countAgencyCustomers(newEmp.agency)} عميلاً`
+                         : 'لا عملاء بهذا التوكيل — سيرى قائمة فارغة'}
+                     </p>
+                   )}
+                 </div>
+                 <div className="flex items-center gap-2">
+                   <label className="text-[11px] text-slate-400 font-bold shrink-0">عدد الأجهزة</label>
+                   <input type="number" min={1} max={10} className={inputClasses} value={newEmp.allowedDeviceCount} onChange={e => setNewEmp({ ...newEmp, allowedDeviceCount: parseInt(e.target.value) || 1 })} />
+                 </div>
+               </div>
+               <button
+                 onClick={addEmployee}
+                 disabled={addingEmp}
+                 className="w-full sm:w-auto bg-blue-600 text-white rounded-xl font-black py-2.5 px-6 text-xs flex items-center justify-center gap-1.5 disabled:opacity-60"
+               >
+                 {addingEmp ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
+                 {addingEmp ? 'جارٍ الحفظ…' : 'إضافة وحفظ في السحابة'}
+               </button>
+               <p className="text-[11px] text-slate-500 font-bold leading-relaxed">
+                 يُحفظ الموظف في السحابة فوراً. هاتفه يُربط تلقائياً عند أول دخول له في حدود عدد الأجهزة.
+               </p>
+             </div>
+
              <div className="overflow-x-auto">
                <table className="w-full text-right md:min-w-[1000px]">
                  <thead>
@@ -694,17 +827,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                <div className="text-xs font-black text-slate-300 flex items-center gap-1.5">
                  <Plus size={15} className="text-blue-400" /> إضافة فرع جديد
                </div>
-               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+               {/* الفرع قائمة كود واسم لا أكثر. التحقق الجغرافي يتم عند
+                   العميل (Customer.radius) لا عند الفرع. */}
+               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                  <input type="text" placeholder="كود الفرع" className="bg-slate-900 border border-slate-700 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-mono outline-none text-white col-span-1" value={newBranch.code || ''} onChange={e => setNewBranch({...newBranch, code: e.target.value})} />
-                 <input type="text" placeholder="اسم الفرع" className="bg-slate-900 border border-slate-700 focus:border-blue-500 rounded-xl px-3 py-2 text-xs outline-none text-white col-span-2 sm:col-span-1" value={newBranch.name} onChange={e => setNewBranch({...newBranch, name: e.target.value})} />
-                 <input type="number" step="0.000001" placeholder="Lat (العرض)" className="bg-slate-900 border border-slate-700 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-mono outline-none text-white col-span-1" value={newBranch.latitude || ''} onChange={e => setNewBranch({...newBranch, latitude: parseFloat(e.target.value)})} />
-                 <input type="number" step="0.000001" placeholder="Lng (الطول)" className="bg-slate-900 border border-slate-700 focus:border-blue-500 rounded-xl px-3 py-2 text-xs font-mono outline-none text-white col-span-1" value={newBranch.longitude || ''} onChange={e => setNewBranch({...newBranch, longitude: parseFloat(e.target.value)})} />
-                 <input type="number" placeholder="النطاق (متر)" className="bg-slate-900 border border-slate-700 focus:border-blue-500 rounded-xl px-3 py-2 text-xs outline-none text-white col-span-1" value={newBranch.radius || ''} onChange={e => setNewBranch({...newBranch, radius: parseInt(e.target.value)})} />
+                 <input type="text" placeholder="اسم الفرع" className="bg-slate-900 border border-slate-700 focus:border-blue-500 rounded-xl px-3 py-2 text-xs outline-none text-white col-span-1" value={newBranch.name} onChange={e => setNewBranch({...newBranch, name: e.target.value})} />
                  <button onClick={() => {
                    if (newBranch.name) {
-                     setBranches([...branches, { ...newBranch, id: Math.random().toString(36).substr(2, 9), radius: newBranch.radius || 100 } as Branch]);
+                     setBranches([...branches, { ...newBranch, id: Math.random().toString(36).substr(2, 9) } as Branch]);
                      logAction('إضافة فرع جديد', `الفرع: ${newBranch.name} (${newBranch.code || 'بدون كود'})`);
-                     setNewBranch({ code: '', name: '', latitude: 0, longitude: 0, radius: 100 });
+                     setNewBranch({ code: '', name: '' });
                    }
                  }} className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-black py-2 px-4 text-xs flex items-center justify-center gap-1.5 transition-all col-span-2 sm:col-span-1 shadow-md">
                    <Plus size={16}/> إضافة فرع
@@ -728,7 +860,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                    <th className="py-4 px-2 w-10 text-center"><input type="checkbox" checked={selectedBranches.size === branches.length && branches.length > 0} onChange={toggleSelectAllBranches} className="accent-blue-600 cursor-pointer" /></th>
                    <th className="py-4 px-2 text-center w-28">الترتيب</th>
                    <th className="py-4 px-2 text-center">كود الفرع</th>
-                   <th className="py-4 px-2">اسم الفرع</th><th className="py-4 px-2">إحداثيات (Lat, Lng)</th><th className="py-4 px-2 text-center">النطاق</th><th className="py-4 px-2 text-center">إجراءات</th></tr></thead>
+                   <th className="py-4 px-2">اسم الفرع</th><th className="py-4 px-2 text-center">إجراءات</th></tr></thead>
                                    <tbody>{branches.map((b, idx) => (
                     <tr 
                       key={b.id} 
@@ -778,8 +910,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </td>
                       <td data-label="كود الفرع" className="py-4 px-2 text-center font-mono text-xs font-bold text-amber-400">{editingBranchId === b.id ? (<input className="bg-slate-900 border border-blue-500 rounded px-2 py-1.5 text-xs font-mono w-full outline-none text-white text-center" placeholder="كود" value={editBranchData.code || ''} onChange={e => setEditBranchData({...editBranchData, code: e.target.value})} />) : (b.code || '--')}</td>
                       <td data-label="اسم الفرع" className="py-4 px-2 font-black">{editingBranchId === b.id ? (<input className="bg-slate-900 border border-blue-500 rounded px-3 py-1.5 text-xs w-full outline-none text-white" value={editBranchData.name || ''} onChange={e => setEditBranchData({...editBranchData, name: e.target.value})} />) : (<span className="text-emerald-400">{b.name}</span>)}</td>
-                      <td data-label="إحداثيات (Lat, Lng)" className="py-4 px-2">{editingBranchId === b.id ? (<div className="flex gap-1"><input type="number" step="0.000001" className="bg-slate-900 border border-blue-500 rounded px-2 py-1.5 text-[10px] w-full font-mono outline-none text-white" placeholder="Lat" value={editBranchData.latitude || ''} onChange={e => setEditBranchData({...editBranchData, latitude: parseFloat(e.target.value)})} /><input type="number" step="0.000001" className="bg-slate-900 border border-blue-500 rounded px-2 py-1.5 text-[10px] w-full font-mono outline-none text-white" placeholder="Lng" value={editBranchData.longitude || ''} onChange={e => setEditBranchData({...editBranchData, longitude: parseFloat(e.target.value)})} /></div>) : (<span className="text-[10px] text-slate-400 font-mono">{b.latitude.toFixed(6)}, {b.longitude.toFixed(6)}</span>)}</td>
-                      <td data-label="النطاق" className="py-4 px-2 text-center">{editingBranchId === b.id ? (<input type="number" className="bg-slate-900 border border-blue-500 rounded px-2 py-1.5 text-xs w-20 text-center outline-none text-white" value={editBranchData.radius || ''} onChange={e => setEditBranchData({...editBranchData, radius: parseInt(e.target.value)})} />) : (<span className="text-blue-400 font-black text-xs">{b.radius}م</span>)}</td>
                       <td data-label="إجراءات" className="py-4 px-2 text-center"><div className="flex justify-center gap-2">{editingBranchId === b.id ? (<><button onClick={() => saveEditBranch(b.id)} className="text-green-500 hover:bg-green-500/10 p-2 rounded-lg transition-all"><Check size={18}/></button><button onClick={() => setEditingBranchId(null)} className="text-red-500 hover:bg-red-500/10 p-2 rounded-lg transition-all"><X size={18}/></button></>) : (<><button onClick={() => { setEditingBranchId(b.id); setEditBranchData(b); }} className="text-blue-400 hover:bg-blue-400/10 p-2 rounded-lg transition-all" title="تعديل"><Edit2 size={16}/></button><button onClick={() => { if(confirm('حذف الفرع؟')) { setBranches(branches.filter(x => x.id !== b.id)); logAction('حذف فرع', `الفرع: ${b.name}`); } }} className="text-slate-500 hover:text-red-400 hover:bg-red-400/10 p-2 rounded-lg transition-all" title="حذف"><Trash2 size={16}/></button></>)}</div></td>
                     </tr>
                   ))}</tbody>
@@ -806,7 +936,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                </div>
                <div className="flex flex-col sm:flex-row gap-2">
                   <input type="text" placeholder="عنوان الوظيفة الجديد" className="bg-slate-900 border border-slate-700 focus:border-blue-500 rounded-xl px-3 py-2 text-xs outline-none text-white flex-1 min-w-0" value={newJobTitle} onChange={e => setNewJobTitle(e.target.value)} />
-                  <button onClick={() => { if(newJobTitle.trim()) { setJobs([...jobs, { id: Math.random().toString(36).substr(2, 9), title: newJobTitle, workingDays: [0, 1, 2, 3, 4, 6] }]); logAction('إضافة وظيفة جديدة', `الوظيفة: ${newJobTitle}`); setNewJobTitle(''); } }} className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl px-4 py-2 text-xs font-black flex items-center justify-center gap-1.5 transition-all shrink-0 shadow-md"><Plus size={16}/> إضافة وظيفة</button>
+                  <button onClick={() => { if(newJobTitle.trim()) { setJobs([...jobs, { id: Math.random().toString(36).substr(2, 9), title: newJobTitle }]); logAction('إضافة وظيفة جديدة', `الوظيفة: ${newJobTitle}`); setNewJobTitle(''); } }} className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl px-4 py-2 text-xs font-black flex items-center justify-center gap-1.5 transition-all shrink-0 shadow-md"><Plus size={16}/> إضافة وظيفة</button>
                </div>
             </div>
 
@@ -819,76 +949,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <thead>
                   <tr className="border-b border-slate-700 text-[10px] sm:text-xs font-black text-slate-500 uppercase tracking-widest text-center">
                     <th className="py-4 px-3 md:px-4 text-right">المسمى الوظيفي</th>
-                    <th className="py-4 px-3 md:px-4 text-center">صلاحية التنقل</th>
-                    <th className="py-4 px-3 md:px-4 text-center">أيام العمل الأسبوعية</th>
                     <th className="py-4 px-3 md:px-4 text-center w-20">إجراءات</th>
                   </tr>
                 </thead>
                 <tbody>
                   {jobs.map(j => {
-                    const DAYS = [
-                      { id: 0, label: 'ح' },
-                      { id: 1, label: 'ن' },
-                      { id: 2, label: 'ث' },
-                      { id: 3, label: 'ر' },
-                      { id: 4, label: 'خ' },
-                      { id: 5, label: 'ج' },
-                      { id: 6, label: 'س' }
-                    ];
-                    const toggleJobDay = (jobId: string, dayId: number) => {
-                      setJobs(jobs.map(job => {
-                        if (job.id === jobId) {
-                          const currentDays = job.workingDays || [0, 1, 2, 3, 4, 6];
-                          const newDays = currentDays.includes(dayId) ? currentDays.filter(d => d !== dayId) : [...currentDays, dayId];
-                          logAction('تعديل أيام عمل الوظيفة', `الوظيفة: ${job.title}, اليوم: ${DAYS.find(d => d.id === dayId)?.label}`);
-                          return { ...job, workingDays: newDays };
-                        }
-                        return job;
-                      }));
-                    };
-
                     return (
                       <tr key={j.id} className="border-b border-slate-700/50 hover:bg-slate-900/30 transition-all text-center">
                         <td data-label="المسمى الوظيفي" className="py-4 px-3 md:px-4 text-right">
                           <span className="font-bold text-xs sm:text-sm text-white">{j.title}</span>
-                        </td>
-                        <td data-label="صلاحية التنقل" className="py-4 px-3 md:px-4 text-center">
-                          <button
-                            onClick={() => {
-                              setJobs(jobs.map(job => job.id === j.id ? { ...job, canVisitMultipleBranches: !job.canVisitMultipleBranches } : job));
-                              logAction('تعديل صلاحية التنقل', `الوظيفة: ${j.title}`);
-                            }}
-                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                              j.canVisitMultipleBranches
-                                ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30'
-                                : 'bg-slate-800 text-slate-400 border border-slate-700 hover:text-slate-200'
-                            }`}
-                            title="اضغط لتغيير الصلاحية"
-                          >
-                            <Navigation size={13} className="shrink-0" />
-                            <span>{j.canVisitMultipleBranches ? 'مسموح بزيارة فروع متعددة' : 'فرع واحد فقط'}</span>
-                          </button>
-                        </td>
-                        <td data-label="أيام العمل الأسبوعية" className="py-4 px-3 md:px-4 text-center">
-                          <div className="flex items-center justify-center gap-1 sm:gap-1.5">
-                            {DAYS.map(d => {
-                              const isSelected = (j.workingDays || [0, 1, 2, 3, 4, 6]).includes(d.id);
-                              return (
-                                <button
-                                  key={d.id}
-                                  onClick={() => toggleJobDay(j.id, d.id)}
-                                  className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg text-xs font-black transition-all flex items-center justify-center cursor-pointer ${
-                                    isSelected
-                                      ? 'bg-blue-600 text-white shadow-xs'
-                                      : 'bg-slate-800 text-slate-500 border border-slate-700/60 hover:bg-slate-700 hover:text-slate-300'
-                                  }`}
-                                  title={`يوم ${d.label}`}
-                                >
-                                  {d.label}
-                                </button>
-                              );
-                            })}
-                          </div>
                         </td>
                         <td data-label="إجراءات" className="py-4 px-3 md:px-4 text-center">
                           <button
@@ -1412,7 +1481,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <button 
                   onClick={() => {
                     const { adminPassword, ...configToSave } = config;
-                    localStorage.setItem('attendance_config', JSON.stringify(configToSave));
+                    localStorage.setItem('cusfollow_config', JSON.stringify(configToSave));
                     alert('تم حفظ الإعدادات بنجاح');
                     logAction('تحديث إعدادات النظام', 'تغيير إعدادات سجل المراقبة');
                   }} 

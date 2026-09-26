@@ -1,47 +1,47 @@
 /* ==========================================================================
-   Uniteam — نظام الألوان
-   كحلي عميق + أزرق كهربائي + توهّج مدروس
+   Cust Follow — نظام الألوان
+   وضع داكن محايد (رمادي فحمي) للأسطح + أخضر الشعار للتمييز وحده + ليموني للزينة
    طبقة إضافية لا تلغي Tailwind، فيمكن تبنّيها تدريجياً
    ========================================================================== */
 
 :root {
   /* ---------- الكحلي: أسطح داكنة ---------- */
-  --nv-950: #050B18;
-  --nv-900: #0A1428;
-  --nv-850: #0E1B33;
-  --nv-800: #122341;
-  --nv-700: #1A3157;
-  --nv-600: #244274;
-  --nv-500: #2E5493;
+  --nv-950: #0A0C10;
+  --nv-900: #0F1115;
+  --nv-850: #181B22;
+  --nv-800: #20242D;
+  --nv-700: #2A2F3A;
+  --nv-600: #363C49;
+  --nv-500: #454C5B;
 
   /* ---------- الأزرق الكهربائي: الهوية ---------- */
-  --el-700: #1B4FD8;
-  --el-600: #2563EB;
-  --el-500: #3B82F6;
-  --el-400: #60A5FA;
-  --el-300: #93C5FD;
-  --el-200: #BFDBFE;
-  --el-100: #DBEAFE;
-  --el-50:  #EFF6FF;
+  --el-700: #166E27;
+  --el-600: #1B7A2B;
+  --el-500: #2DB52C;
+  --el-400: #6FD95A;
+  --el-300: #9CF350;
+  --el-200: #C7F59B;
+  --el-100: #E3FBD0;
+  --el-50:  #F2FDE8;
 
   /* ---------- سماوي مساعد للتوهّج ---------- */
-  --cy-500: #06B6D4;
-  --cy-400: #22D3EE;
-  --cy-300: #67E8F9;
+  --cy-500: #A8E020;
+  --cy-400: #CBF837;
+  --cy-300: #DDFB7A;
 
   /* ---------- الأسطح الفاتحة ---------- */
-  --bg:      #F4F7FC;
+  --bg:      #0F1115;
   --surface: #FFFFFF;
-  --surface-2: #F8FAFD;
-  --line:    #E3E9F2;
-  --line-2:  #CFD9E8;
+  --surface-2: #F7FBF7;
+  --line:    #262A33;
+  --line-2:  #3A404C;
 
   /* ---------- النصوص ---------- */
-  --tx:    #0B1524;
-  --tx-2:  #55677F;
-  --tx-3:  #8A9BB2;
-  --on-dark:   #E9F0FA;
-  --on-dark-2: #92A8C8;
+  --tx:    #0B1A10;
+  --tx-2:  #54705C;
+  --tx-3:  #88A08E;
+  --on-dark:   #E8EAED;
+  --on-dark-2: #9AA3B2;
 
   /* ---------- الحالات ---------- */
   --ok: #10B981;      --ok-bg: #E7F8F1;   --ok-glow: rgba(16,185,129,.35);
@@ -51,19 +51,21 @@
   --offsite: #06B6D4; --offsite-bg: #E2F7FB;
 
   /* ---------- التدرجات ---------- */
-  --grad-brand: linear-gradient(135deg, #2563EB 0%, #1B4FD8 55%, #06B6D4 100%);
-  --grad-navy:  linear-gradient(180deg, #0E1B33 0%, #050B18 100%);
+  --grad-brand: linear-gradient(135deg, #1F8B24 0%, #1B7A2B 55%, #14632A 100%);
+  /* شريط الزينة وحده يحمل ليموني الشعار — لا نصّ فوقه فلا قيد تباين */
+  --grad-accent: linear-gradient(90deg, #CBF837 0%, #2DB52C 55%, #1B7A2B 100%);
+  --grad-navy:  linear-gradient(180deg, #181B22 0%, #111318 100%);
   --grad-sheen: linear-gradient(135deg, rgba(255,255,255,.22) 0%, rgba(255,255,255,0) 60%);
   --grad-ok:    linear-gradient(135deg, #10B981 0%, #059669 100%);
   --grad-warn:  linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
   --grad-bad:   linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
 
   /* ---------- الظلال والتوهّج ---------- */
-  --sh-1: 0 1px 2px rgba(11,21,36,.06);
-  --sh-2: 0 4px 14px rgba(11,21,36,.08), 0 1px 3px rgba(11,21,36,.05);
-  --sh-3: 0 12px 34px rgba(11,21,36,.12), 0 3px 8px rgba(11,21,36,.06);
-  --glow-brand: 0 6px 22px rgba(37,99,235,.38);
-  --glow-soft:  0 0 0 4px rgba(37,99,235,.12);
+  --sh-1: 0 1px 2px rgba(0,0,0,.25);
+  --sh-2: 0 4px 14px rgba(0,0,0,.3), 0 1px 3px rgba(0,0,0,.2);
+  --sh-3: 0 12px 34px rgba(0,0,0,.4), 0 3px 8px rgba(0,0,0,.25);
+  --glow-brand: 0 6px 22px rgba(45,181,44,.38);
+  --glow-soft:  0 0 0 4px rgba(45,181,44,.12);
 
   --r-sm: 8px; --r: 12px; --r-lg: 16px; --r-xl: 22px; --r-full: 999px;
 }
@@ -129,7 +131,7 @@
   content: '';
   position: absolute; inset-inline-end: -60px; top: -120px;
   width: 320px; height: 320px; border-radius: 50%;
-  background: radial-gradient(circle, rgba(37,99,235,.35) 0%, rgba(37,99,235,0) 70%);
+  background: radial-gradient(circle, rgba(45,181,44,.35) 0%, rgba(45,181,44,0) 70%);
   pointer-events: none;
 }
 .ut-header__title { color: var(--on-dark); font-weight: 700; letter-spacing: -.02em; }
@@ -145,7 +147,7 @@
 .ut-chip--ok    { background: rgba(16,185,129,.14);  color: #6EE7B7; border-color: rgba(16,185,129,.25); }
 .ut-chip--warn  { background: rgba(245,158,11,.14);  color: #FCD34D; border-color: rgba(245,158,11,.25); }
 .ut-chip--bad   { background: rgba(239,68,68,.14);   color: #FCA5A5; border-color: rgba(239,68,68,.25); }
-.ut-chip--brand { background: rgba(37,99,235,.18);   color: #93C5FD; border-color: rgba(37,99,235,.3); }
+.ut-chip--brand { background: rgba(45,181,44,.18);   color: #B8F58A; border-color: rgba(45,181,44,.3); }
 
 /* ==========================================================================
    أزرار الهوية
@@ -190,7 +192,7 @@
 /* ==========================================================================
    شريط علوي متدرّج رفيع — يوحّد هوية الصفحات
    ========================================================================== */
-.ut-accent-bar { height: 3px; background: var(--grad-brand); border-radius: var(--r-full); }
+.ut-accent-bar { height: 3px; background: var(--grad-accent); border-radius: var(--r-full); }
 
 /* ==========================================================================
    تجاوب
@@ -324,7 +326,7 @@
     min-height: 36px;
     border-radius: 8px;
     border: 1px solid rgba(255, 255, 255, 0.12);
-    background: rgba(15, 25, 45, 0.75);
+    background: rgba(24, 27, 34, 0.75);
     color: var(--on-dark-2);
     transition: all 0.2s ease;
     overflow: hidden;
@@ -338,7 +340,7 @@
   .admin-nav-item--active {
     background: var(--grad-brand);
     border-color: rgba(255, 255, 255, 0.35);
-    box-shadow: 0 0 10px rgba(59, 130, 246, 0.4);
+    box-shadow: 0 0 10px rgba(45,181,44, 0.4);
     color: #ffffff;
   }
   .admin-nav-item svg { width: 13px; height: 13px; flex: none; }
@@ -466,10 +468,10 @@ body {
   font-family: 'Sora', sans-serif;
   font-weight: 800;
   letter-spacing: -.03em;
-  background: linear-gradient(100deg, #FFFFFF 0%, #BFDBFE 45%, #67E8F9 100%);
+  background: linear-gradient(100deg, #FFFFFF 0%, #E3FBD0 45%, #CBF837 100%);
   -webkit-background-clip: text; background-clip: text;
   -webkit-text-fill-color: transparent; color: transparent;
-  filter: drop-shadow(0 2px 10px rgba(96, 165, 250, .35));
+  filter: drop-shadow(0 2px 10px rgba(111,217,90, .35));
 }
 
 /* اسم التطبيق في شاشة الدخول — أكبر وأفخم */
@@ -478,11 +480,11 @@ body {
   font-weight: 800;
   letter-spacing: -.045em;
   line-height: 1;
-  background: linear-gradient(105deg, #FFFFFF 0%, #DBEAFE 38%, #67E8F9 78%, #FFFFFF 100%);
+  background: linear-gradient(105deg, #FFFFFF 0%, #E3FBD0 38%, #CBF837 78%, #FFFFFF 100%);
   background-size: 200% 100%;
   -webkit-background-clip: text; background-clip: text;
   -webkit-text-fill-color: transparent; color: transparent;
-  filter: drop-shadow(0 6px 26px rgba(59, 130, 246, .5));
+  filter: drop-shadow(0 6px 26px rgba(45,181,44, .5));
   animation: ut-shine 7s ease-in-out infinite;
 }
 @keyframes ut-shine { 0%,100% { background-position: 0% 50% } 50% { background-position: 100% 50% } }
@@ -519,10 +521,11 @@ body {
    خلفية التطبيق العامة
    ========================================================================== */
 body {
-  background-color: #EEF3FB;
+  background-color: #0F1115;
+  /* هالتان خافتتان بلون الشعار — تكسران سواد الخلفية دون أن تلوّناها */
   background-image:
-    radial-gradient(circle at 88% -6%, rgba(37, 99, 235, .14) 0%, rgba(37, 99, 235, 0) 42%),
-    radial-gradient(circle at 4% 100%, rgba(6, 182, 212, .12) 0%, rgba(6, 182, 212, 0) 40%);
+    radial-gradient(circle at 88% -6%, rgba(45,181,44,.10) 0%, rgba(45,181,44,0) 42%),
+    radial-gradient(circle at 4% 100%, rgba(203,248,55,.05) 0%, rgba(203,248,55,0) 40%);
   background-attachment: fixed;
 }
 
@@ -572,7 +575,7 @@ html, body {
   content: '';
   position: absolute; inset-inline-end: -50px; top: -70px;
   width: 220px; height: 220px; border-radius: 50%;
-  background: radial-gradient(circle, rgba(37,99,235,.4) 0%, rgba(37,99,235,0) 70%);
+  background: radial-gradient(circle, rgba(45,181,44,.4) 0%, rgba(45,181,44,0) 70%);
   pointer-events: none;
 }
 .login-side__head { text-align: center; padding: 6px 0 18px; position: relative; }
@@ -655,7 +658,8 @@ html, body {
 
   .login-side__nav {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    /* تبويبان: «دخول الموظف» و«الإدارة» — أُلغي «حساب جديد» */
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     justify-content: center;
     /* stretch لا center: مع center يأخذ كل تبويب ارتفاع محتواه، فـ«الإدارة»
        (كلمة واحدة) تخرج أقصر من «دخول الموظف» (كلمتان تلتفّان لسطرين)
@@ -688,13 +692,7 @@ html, body {
   }
 }
 
-/* شاشات ضيّقة جداً: عمودان بدل ثلاثة حتى لا يتقطّع النص.
-   على 320px يصير عرض التبويب في ثلاثة أعمدة ~93px فتلتفّ «دخول الموظف»
-   إلى أسطر مبتورة. عمودان يمنحان ~146px فيبقى النص مقروءاً.
-   ملاحظة: التبويبات ثلاثة، فالثالث ينفرد في صفّه الثاني. */
-@media (max-width: 340px) {
-  .login-side__nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
+
 
 /* ==========================================================================
    شارة المسافة عن الفرع

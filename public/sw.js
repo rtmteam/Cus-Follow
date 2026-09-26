@@ -1,7 +1,7 @@
 
 // رفع الرقم يمسح كل النسخ القديمة من الكاش عند التفعيل.
 // ارفعه بعد أي تعديل على ملف يحمل الاسم نفسه ولا يتغير اسمه مع البناء.
-const CACHE_NAME = 'uniteam-cache-v9';
+const CACHE_NAME = 'uniteam-cache-v11';
 
 // التخزين المسبق يقتصر على صفحة الدخول لتعمل دون اتصال.
 // لا يُخزَّن هنا manifest.json ولا ملفات الأيقونات: أسماؤها ثابتة،
@@ -20,7 +20,9 @@ const NETWORK_FIRST = [
   'icon.png',
   'icon-192.png',
   'icon-maskable.png',
-  'favicon.png'
+  'favicon.png',
+  'logo.png',            // شعار شاشة الدخول والترويسة — الاسم ثابت أيضاً
+  'logo-mark.png'
 ];
 
 function isNetworkFirst(url) {

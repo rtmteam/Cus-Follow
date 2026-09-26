@@ -221,7 +221,9 @@ const ReportsView: React.FC<ReportsViewProps> = ({
 
       setVisits(Array.isArray(data.visits) ? data.visits : []);
       setCustomers(Array.isArray(data.customers) ? data.customers : []);
-      setIsAdminLogin(!!(adminConfig && user === adminConfig.adminUsername && pass === adminConfig.adminPassword));
+      // الخادم يقول صراحةً هل الحساب مسؤول — كلمة مرور المسؤول لم تعد
+      // مشحونة في التطبيق لتُقارَن هنا
+      setIsAdminLogin(data.isAdmin === true);
       setIsLoggedIn(true);
       logAction?.('دخول شاشة التقارير', `المستخدم: ${user}`);
     } catch (err: any) {

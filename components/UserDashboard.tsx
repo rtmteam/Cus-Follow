@@ -20,6 +20,11 @@ interface UserDashboardProps {
   onRefresh: () => Promise<any> | void;
   isSyncing: boolean;
   lastUpdated?: string;
+  /**
+   * لحظة بدء الطلب الذي جاءت منه openVisits. تُقارن بلحظة آخر أمر زيارة
+   * أرسلته هذه الشاشة: لقطة بدأت قبله لا تعكس نتيجته فلا يُعتدّ بها.
+   */
+  openVisitsAsOf?: number;
   logAction: (action: string, details?: string) => void;
 }
 
@@ -75,6 +80,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
   onRefresh,
   isSyncing,
   lastUpdated,
+  openVisitsAsOf,
   logAction
 }) => {
   /**
@@ -171,6 +177,11 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
 
   // ---------- الزيارة ----------
   const [activeVisit, setActiveVisit] = useState<Visit | null>(() => readLocal<Visit | null>(ACTIVE_VISIT_KEY, null));
+  /**
+   * لحظة إرسال آخر أمر زيارة (فتح · إغلاق · إلغاء) من هذه الشاشة.
+   * أي لقطة للزيارات المفتوحة بدأ طلبها قبل هذه اللحظة قديمة بالتعريف.
+   */
+  const lastVisitCommandAtRef = useRef(0);
   const [recentVisits, setRecentVisits] = useState<Visit[]>(() => readLocal<Visit[]>(RECENT_VISITS_KEY, []));
 
   const [reasonChoice, setReasonChoice] = useState('');
@@ -192,7 +203,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
     if (!navigator.geolocation) {
       setGeoError({
         label: 'الموقع غير مدعوم',
-        help: 'هذا المتصفح لا يدعم تحديد الموقع. استخدم تطبيق Uniteam من هاتفك.'
+        help: 'هذا المتصفح لا يدعم تحديد الموقع. استخدم تطبيق Cust Follow من هاتفك.'
       });
       return;
     }
@@ -212,7 +223,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
         if (err && err.code === 1) {
           setGeoError({
             label: 'إذن الموقع مرفوض',
-            help: 'افتح إعدادات الهاتف ← التطبيقات ← Uniteam ← الأذونات ← الموقع، واختر "السماح أثناء استخدام التطبيق"، ثم أعد المحاولة.'
+            help: 'افتح إعدادات الهاتف ← التطبيقات ← Cust Follow ← الأذونات ← الموقع، واختر "السماح أثناء استخدام التطبيق"، ثم أعد المحاولة.'
           });
         } else if (err && err.code === 2) {
           setGeoError({
@@ -239,9 +250,17 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
    *
    * لو أُغلقت الزيارة من جهاز آخر، أو مُسحت من الشيت، فالنسخة المحلية
    * تصير كذباً يحبس الموظف في زيارة لا وجود لها. لا نمسحها إلا بعد مزامنة
-   * ناجحة فعلاً (lastUpdated) حتى لا يتسبّب انقطاع الشبكة في مسحها.
+   * ناجحة فعلاً (openVisitsAsOf) حتى لا يتسبّب انقطاع الشبكة في مسحها.
+   *
+   * ولا يُعتدّ بلقطة بدأ طلبها **قبل** آخر أمر زيارة: طلب مزامنة انطلق ثم
+   * فتح الموظف زيارة، فوصل ردّه بعد الفتح بلا الزيارة الجديدة — فكانت
+   * الشاشة تُخفيها ثم تُظهرها المزامنة التالية. هذا هو «التهنيج» الذي يُرى
+   * والزيارة مفتوحة.
    */
   useEffect(() => {
+    if (openVisitsAsOf === undefined) return;
+    if (openVisitsAsOf < lastVisitCommandAtRef.current) return;
+
     const mine = openVisits.find(
       (v) => user.serialNumber && String(v.serialNumber).trim() === String(user.serialNumber).trim()
     );
@@ -255,14 +274,12 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
       return;
     }
 
-    if (lastUpdated) {
-      setActiveVisit((prev) => {
-        if (!prev) return prev;
-        localStorage.removeItem(ACTIVE_VISIT_KEY);
-        return null;
-      });
-    }
-  }, [openVisits, lastUpdated, user.serialNumber]);
+    setActiveVisit((prev) => {
+      if (!prev) return prev;
+      try { localStorage.removeItem(ACTIVE_VISIT_KEY); } catch (e) {}
+      return null;
+    });
+  }, [openVisits, openVisitsAsOf, user.serialNumber]);
 
   /* لا إغلاق بالضغط خارج القائمة: صارت داخل التخطيط لا فوقه، ولمس الشاشة
      للتمرير على الهاتف كان يُغلقها في منتصف البحث. تُغلق بزرّها أو باختيار عميل. */
@@ -355,7 +372,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
         const geoErr = error as GeolocationPositionError;
         let msg = 'تعذر تحديد الموقع الحالي بدقة. تأكد من تفعيل GPS والمحاولة مرة أخرى.';
         if (geoErr && geoErr.code === 1) {
-          msg = 'إذن الوصول للموقع مرفوض. افتح إعدادات الهاتف ← التطبيقات ← Uniteam ← الأذونات ← الموقع، واختر "السماح أثناء استخدام التطبيق"، ثم أعد المحاولة.';
+          msg = 'إذن الوصول للموقع مرفوض. افتح إعدادات الهاتف ← التطبيقات ← Cust Follow ← الأذونات ← الموقع، واختر "السماح أثناء استخدام التطبيق"، ثم أعد المحاولة.';
         } else if (geoErr && geoErr.code === 2) {
           msg = 'تعذر الوصول لخدمة الموقع. تأكد من تفعيل GPS في الهاتف ومن أنك لست في مكان مغلق تماماً.';
         } else if (geoErr && geoErr.code === 3) {
@@ -475,6 +492,22 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
    * @param verify دالة تقرأ حال الخادم وتحكم: هل نُفّذ الأمر فعلاً؟
    */
   const sendVisitCommand = async (
+    payload: any,
+    successText: string,
+    verify?: () => Promise<boolean | undefined>
+  ): Promise<{ ok: boolean; text: string }> => {
+    // لقطات الزيارات المفتوحة التي بدأت قبل انتهاء هذا الأمر لا تُطبَّق على
+    // الشاشة (انظر التأثير أعلاه). تُعلَّم اللحظة عند البدء وعند الانتهاء:
+    // ما بدأ أثناء الأمر قد يسبق كتابة الخادم أو يلحقها — فلا يُعتدّ به.
+    lastVisitCommandAtRef.current = Date.now();
+    try {
+      return await runVisitCommand(payload, successText, verify);
+    } finally {
+      lastVisitCommandAtRef.current = Date.now();
+    }
+  };
+
+  const runVisitCommand = async (
     payload: any,
     successText: string,
     verify?: () => Promise<boolean | undefined>

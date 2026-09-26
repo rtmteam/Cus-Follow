@@ -1,6 +1,6 @@
 {
   "appId": "com.uniteam.cusfollow",
-  "appName": "Uniteam-Cus Follow",
+  "appName": "Cust Follow",
   "webDir": "dist",
   "bundledWebRuntime": false,
   "server": {
@@ -12,6 +12,6 @@
   "android": {
     "allowMixedContent": true,
     "captureInput": false,
-    "backgroundColor": "#0A1428"
+    "backgroundColor": "#0F1115"
   }
 }

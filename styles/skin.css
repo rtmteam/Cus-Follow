@@ -7,20 +7,20 @@
    تُحمَّل بعد Tailwind، فتغلبه في الترتيب.
    ========================================================================== */
 
-/* ---------- الأسطح الداكنة: من الرمادي المائل للأزرق إلى الكحلي ---------- */
+/* ---------- الأسطح الداكنة: رمادي فحمي محايد (وضع داكن) ---------- */
 .bg-slate-950 { background-color: var(--nv-950) !important; }
 .bg-slate-900 { background-color: var(--nv-900) !important; }
 .bg-slate-800 { background-color: var(--nv-850) !important; }
 .bg-slate-700 { background-color: var(--nv-800) !important; }
 .bg-slate-600 { background-color: var(--nv-700) !important; }
 
-.bg-slate-900\/50 { background-color: rgba(10, 20, 40, .55) !important; }
-.bg-slate-900\/30 { background-color: rgba(10, 20, 40, .35) !important; }
-.bg-slate-700\/50 { background-color: rgba(18, 35, 65, .55) !important; }
-.bg-slate-800\/50 { background-color: rgba(14, 27, 51, .55) !important; }
+.bg-slate-900\/50 { background-color: rgba(15, 17, 21, .55) !important; }
+.bg-slate-900\/30 { background-color: rgba(15, 17, 21, .35) !important; }
+.bg-slate-700\/50 { background-color: rgba(32, 36, 45, .55) !important; }
+.bg-slate-800\/50 { background-color: rgba(24, 27, 34, .55) !important; }
 
-.bg-slate-100 { background-color: #E9EFF8 !important; }
-.bg-slate-50  { background-color: #F4F7FC !important; }
+.bg-slate-100 { background-color: #E8EAEE !important; }
+.bg-slate-50  { background-color: #F5F6F8 !important; }
 
 /* ---------- الحدود ---------- */
 .border-slate-800    { border-color: rgba(255, 255, 255, .06) !important; }
@@ -32,12 +32,12 @@
 .divide-slate-700\/30 > * + * { border-color: rgba(255, 255, 255, .05) !important; }
 
 /* ---------- النصوص ---------- */
-.text-slate-300 { color: #C6D5EA !important; }
+.text-slate-300 { color: #C9CED6 !important; }
 .text-slate-400 { color: var(--on-dark-2) !important; }
-.text-slate-500 { color: #7E93B2 !important; }
-.text-slate-600 { color: #61779A !important; }
+.text-slate-500 { color: #8B93A1 !important; }
+.text-slate-600 { color: #6B7280 !important; }
 
-/* ---------- الأزرق: هوية أوضح وأعمق ---------- */
+/* ---------- أصناف blue-* صارت أخضر الهوية (انظر tailwind.config.js) ---------- */
 .bg-blue-600    { background-color: var(--el-600) !important; }
 .bg-blue-500    { background-color: var(--el-500) !important; }
 .bg-blue-700    { background-color: var(--el-700) !important; }
@@ -50,10 +50,10 @@
 .text-blue-100  { color: var(--el-100) !important; }
 
 .border-blue-500     { border-color: var(--el-500) !important; }
-.border-blue-800\/40 { border-color: rgba(37, 99, 235, .35) !important; }
-.border-blue-900\/30 { border-color: rgba(37, 99, 235, .28) !important; }
-.bg-blue-900\/20     { background-color: rgba(37, 99, 235, .14) !important; }
-.bg-blue-900\/30     { background-color: rgba(37, 99, 235, .2) !important; }
+.border-blue-800\/40 { border-color: rgba(45,181,44, .35) !important; }
+.border-blue-900\/30 { border-color: rgba(45,181,44, .28) !important; }
+.bg-blue-900\/20     { background-color: rgba(45,181,44, .14) !important; }
+.bg-blue-900\/30     { background-color: rgba(45,181,44, .2) !important; }
 .bg-blue-50          { background-color: var(--el-50) !important; }
 
 /* التدرّج القديم يصبح تدرّج الهوية */
@@ -97,9 +97,9 @@
 .bg-indigo-600 { background-color: #6366F1 !important; }
 .text-indigo-400 { color: #A5B4FC !important; }
 .bg-indigo-600\/5 { background-color: rgba(99, 102, 241, .09) !important; }
-.bg-blue-600\/5 { background-color: rgba(37, 99, 235, .09) !important; }
-.bg-blue-600\/10 { background-color: rgba(37, 99, 235, .14) !important; }
-.hover\:bg-blue-600\/10:hover { background-color: rgba(37, 99, 235, .14) !important; }
+.bg-blue-600\/5 { background-color: rgba(45,181,44, .09) !important; }
+.bg-blue-600\/10 { background-color: rgba(45,181,44, .14) !important; }
+.hover\:bg-blue-600\/10:hover { background-color: rgba(45,181,44, .14) !important; }
 
 /* ==========================================================================
    لمسات الهوية على المكوّنات القائمة
@@ -134,11 +134,11 @@ button.bg-red-600 {
 /* الحقول: حلقة تركيز بلون الهوية */
 input:focus, select:focus, textarea:focus {
   border-color: var(--el-500) !important;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, .22) !important;
+  box-shadow: 0 0 0 3px rgba(45,181,44, .22) !important;
   outline: none !important;
 }
 
-input::placeholder, textarea::placeholder { color: #64789B !important; }
+input::placeholder, textarea::placeholder { color: #6B7280 !important; }
 
 /* القوائم المنسدلة داخل الأسطح الداكنة */
 select option { background-color: var(--nv-900) !important; color: var(--on-dark) !important; }
@@ -153,7 +153,7 @@ body { background-color: var(--bg) !important; }
 ::-webkit-scrollbar-thumb:hover { background: var(--tx-3); }
 
 /* تحديد النص */
-::selection { background: rgba(37, 99, 235, .25); }
+::selection { background: rgba(45,181,44, .25); }
 
 /* ==========================================================================
    حركات خفيفة تُشعر بالجودة دون إزعاج
@@ -168,12 +168,12 @@ body { background-color: var(--bg) !important; }
    تكملة التغطية — أصناف نادرة الاستخدام في الشاشات الفرعية
    ========================================================================== */
 .bg-slate-500  { background-color: var(--nv-600) !important; }
-.text-slate-100{ color: #E9F0FA !important; }
-.text-slate-200{ color: #D5E1F1 !important; }
+.text-slate-100{ color: #EEF0F3 !important; }
+.text-slate-200{ color: #D8DCE2 !important; }
 .text-slate-900{ color: var(--tx) !important; }
 
 .bg-blue-400   { background-color: var(--el-400) !important; }
-.border-blue-500\/50 { border-color: rgba(59, 130, 246, .5) !important; }
+.border-blue-500\/50 { border-color: rgba(45,181,44, .5) !important; }
 .border-blue-400 { border-color: var(--el-400) !important; }
 .text-blue-300 { color: var(--el-300) !important; }
 .text-blue-200 { color: var(--el-200) !important; }
@@ -253,19 +253,19 @@ button.font-black, .ut-btn, .login-tab { font-weight: 700; }
 .hover\:bg-red-100:hover { background-color: #FBDCDC !important; }
 
 .bg-gray-50 { background-color: var(--bg) !important; }
-.bg-gray-100 { background-color: #E9EFF8 !important; }
+.bg-gray-100 { background-color: #E8EAEE !important; }
 .text-gray-500 { color: var(--tx-2) !important; }
 .text-gray-800 { color: var(--tx) !important; }
 .border-gray-200 { border-color: var(--line) !important; }
 
 /* تغطية نهائية — شفافيات متبقية */
-.bg-slate-950\/60 { background-color: rgba(5, 11, 24, .6) !important; }
+.bg-slate-950\/60 { background-color: rgba(10, 12, 16, .6) !important; }
 .bg-green-500\/10 { background-color: rgba(16, 185, 129, .12) !important; }
 .bg-green-900\/30 { background-color: rgba(16, 185, 129, .2) !important; }
 .border-green-900\/30 { border-color: rgba(16, 185, 129, .28) !important; }
 .border-green-800\/30 { border-color: rgba(16, 185, 129, .24) !important; }
-.bg-blue-400\/10 { background-color: rgba(96, 165, 250, .12) !important; }
-.border-blue-800\/30 { border-color: rgba(37, 99, 235, .26) !important; }
+.bg-blue-400\/10 { background-color: rgba(111,217,90, .12) !important; }
+.border-blue-800\/30 { border-color: rgba(45,181,44, .26) !important; }
 .bg-red-400\/10 { background-color: rgba(248, 113, 113, .12) !important; }
 .bg-red-600\/10 { background-color: rgba(239, 68, 68, .12) !important; }
 .bg-orange-400\/10 { background-color: rgba(251, 191, 36, .12) !important; }

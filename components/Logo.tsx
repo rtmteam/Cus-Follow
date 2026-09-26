@@ -1,11 +1,14 @@
 import React from 'react';
 
 /**
- * شعار Uniteam — صورة الهوية الرسمية.
+ * شعار Cust Follow — صورة الهوية الرسمية.
  *
- * ملفان في public/ مشتقّان من الأيقونة الأصلية:
- *   logo-mark.png  العلامة وحدها (حرف U بلا نص) — للترويسة والأحجام الصغيرة
- *   logo.png       الأيقونة كاملة بكلمة UNITEAM — لشاشة الدخول والأحجام الكبيرة
+ * ملفان في public/ مشتقّان من resources/icon.png (الأيقونة نفسها بمقاسين):
+ *   logo-mark.png  128px — للترويسة (تُعرض 38px)
+ *   logo.png       288px — لشاشة الدخول (تُعرض حتى 132px)
+ *   كلاهما بلوحة 256 لوناً: 7KB و19KB بدل 58KB و165KB بلا فرق يُرى عند هذه المقاسات.
+ *
+ * الشعار يحمل نصّاً، فلم تُقتطع منه «علامة» منفصلة: أي قصّ يبتر الرسم أو النص.
  *
  * المسارات نسبية (./) لأن vite مضبوط على base: './' فيعمل البناء
  * من أي مجلد فرعي على GitHub Pages ومن داخل غلاف Capacitor على السواء.
@@ -28,7 +31,7 @@ export const LogoMark: React.FC<LogoMarkProps> = ({
 }) => (
   <img
     src={variant === 'full' ? './logo.png' : './logo-mark.png'}
-    alt="Uniteam"
+    alt="Cust Follow"
     width={size}
     height={size}
     className={className}
@@ -39,7 +42,7 @@ export const LogoMark: React.FC<LogoMarkProps> = ({
       flex: 'none',
       display: 'block',
       objectFit: 'cover',
-      boxShadow: glow ? '0 6px 22px rgba(37,99,235,.38)' : 'none'
+      boxShadow: glow ? '0 6px 22px rgba(45,181,44,.38)' : 'none'
     }}
   />
 );
@@ -56,7 +59,7 @@ const Logo: React.FC<LogoProps> = ({ size = 40, tone = 'dark', showSub = true, c
   <div className={`flex items-center gap-2.5 ${className}`}>
     <LogoMark size={size} />
     <div className="leading-none">
-      <div className="ut-brand" style={{ fontSize: Math.round(size * 0.46) }}>Uniteam</div>
+      <div className="ut-brand" style={{ fontSize: Math.round(size * 0.46) }}>Cust Follow</div>
       {showSub && (
         <div
           style={{
@@ -65,7 +68,7 @@ const Logo: React.FC<LogoProps> = ({ size = 40, tone = 'dark', showSub = true, c
             color: tone === 'dark' ? 'var(--on-dark-2)' : 'var(--tx-3)'
           }}
         >
-          Cus Follow · متابعة العملاء
+          متابعة العملاء
         </div>
       )}
     </div>
