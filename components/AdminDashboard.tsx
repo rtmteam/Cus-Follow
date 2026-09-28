@@ -593,7 +593,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <div className="admin-side__brand-icon"><Shield size={18} /></div>
             <div className="leading-none flex-1">
               <div className="admin-side__brand-name">لوحة الإدارة</div>
-              <div className="admin-side__brand-sub">Cust Follow Admin</div>
+              <div className="admin-side__brand-sub">Cus-Follow Admin</div>
             </div>
           </div>
 

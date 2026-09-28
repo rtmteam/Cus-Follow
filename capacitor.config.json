@@ -1,6 +1,6 @@
 {
-  "appId": "com.uniteam.cusfollow",
-  "appName": "Cust Follow",
+  "appId": "com.rtmteam.cusfollow",
+  "appName": "Cus-Follow",
   "webDir": "dist",
   "bundledWebRuntime": false,
   "server": {

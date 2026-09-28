@@ -1,6 +1,6 @@
 {
-  "name": "Cust Follow — متابعة العملاء",
-  "short_name": "Cust Follow",
+  "name": "Cus-Follow — متابعة العملاء",
+  "short_name": "Cus-Follow",
   "start_url": "index.html",
   "display": "standalone",
   "background_color": "#0F1115",

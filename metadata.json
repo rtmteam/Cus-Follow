@@ -1,5 +1,5 @@
 {
-  "name": "Uniteam",
+  "name": "Cus-Follow",
   "description": "تطبيق متابعة زيارات العملاء: يفتح الموظف زيارة عند العميل بعد التحقق من موقعه (GPS)، ويسجّل المديونية وأسباب تجاوز الائتمان وموعد السداد قبل إغلاقها.",
   "requestFramePermissions": [
     "geolocation"

@@ -323,14 +323,14 @@ jobs:
       - name: Prepare APK
         run: |
           mkdir -p output
-          cp android/app/build/outputs/apk/release/app-release.apk output/Uniteam-Attendance.apk
+          cp android/app/build/outputs/apk/release/app-release.apk output/Cus-Follow.apk
           ls -lh output/
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Uniteam-Attendance-APK
-          path: output/Uniteam-Attendance.apk
+          name: Cus-Follow-APK
+          path: output/Cus-Follow.apk
           retention-days: 90
           if-no-files-found: error
 
@@ -352,10 +352,10 @@ jobs:
           # الوسم موجود مسبقاً؟ نرفع الملف فوق الإصدار القائم بدل الفشل.
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "الإصدار $TAG موجود - يُستبدل الملف"
-            gh release upload "$TAG" output/Uniteam-Attendance.apk --clobber
+            gh release upload "$TAG" output/Cus-Follow.apk --clobber
           else
-            gh release create "$TAG" output/Uniteam-Attendance.apk \
-              --title "Uniteam $VN" \
+            gh release create "$TAG" output/Cus-Follow.apk \
+              --title "Cus-Follow $VN" \
               --notes "بناء تلقائي.
 
           رقم الإصدار الداخلي: \`$VC\`
@@ -364,24 +364,24 @@ jobs:
           \`\`\`json
           \"latestVersionCode\": $VC,
           \"latestVersionName\": \"$VN\",
-          \"apkUrl\": \"https://github.com/${{ github.repository }}/releases/download/$TAG/Uniteam-Attendance.apk\"
+          \"apkUrl\": \"https://github.com/${{ github.repository }}/releases/download/$TAG/Cus-Follow.apk\"
           \`\`\`"
           fi
 
-          echo "APK_URL=https://github.com/${{ github.repository }}/releases/download/$TAG/Uniteam-Attendance.apk" >> "$GITHUB_ENV"
+          echo "APK_URL=https://github.com/${{ github.repository }}/releases/download/$TAG/Cus-Follow.apk" >> "$GITHUB_ENV"
           echo "REL_TAG=$TAG" >> "$GITHUB_ENV"
 
       # ================= 9. الملخص =================
       - name: Summary
         if: success()
         run: |
-          SIZE=$(du -h output/Uniteam-Attendance.apk | cut -f1)
+          SIZE=$(du -h output/Cus-Follow.apk | cut -f1)
           {
             echo "## تم بناء ملف APK بنجاح"
             echo ""
             echo "| البيان | القيمة |"
             echo "| --- | --- |"
-            echo "| اسم الملف | Uniteam-Attendance.apk |"
+            echo "| اسم الملف | Cus-Follow.apk |"
             echo "| الحجم | ${SIZE} |"
             echo "| الإصدار | ${{ inputs.version_name }} (${{ inputs.version_code }}) |"
             echo "| نوع البناء | release موقّع بمفتاح ثابت |"

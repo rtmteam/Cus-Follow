@@ -203,7 +203,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
     if (!navigator.geolocation) {
       setGeoError({
         label: 'الموقع غير مدعوم',
-        help: 'هذا المتصفح لا يدعم تحديد الموقع. استخدم تطبيق Cust Follow من هاتفك.'
+        help: 'هذا المتصفح لا يدعم تحديد الموقع. استخدم تطبيق Cus-Follow من هاتفك.'
       });
       return;
     }
@@ -223,7 +223,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
         if (err && err.code === 1) {
           setGeoError({
             label: 'إذن الموقع مرفوض',
-            help: 'افتح إعدادات الهاتف ← التطبيقات ← Cust Follow ← الأذونات ← الموقع، واختر "السماح أثناء استخدام التطبيق"، ثم أعد المحاولة.'
+            help: 'افتح إعدادات الهاتف ← التطبيقات ← Cus-Follow ← الأذونات ← الموقع، واختر "السماح أثناء استخدام التطبيق"، ثم أعد المحاولة.'
           });
         } else if (err && err.code === 2) {
           setGeoError({
@@ -372,7 +372,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
         const geoErr = error as GeolocationPositionError;
         let msg = 'تعذر تحديد الموقع الحالي بدقة. تأكد من تفعيل GPS والمحاولة مرة أخرى.';
         if (geoErr && geoErr.code === 1) {
-          msg = 'إذن الوصول للموقع مرفوض. افتح إعدادات الهاتف ← التطبيقات ← Cust Follow ← الأذونات ← الموقع، واختر "السماح أثناء استخدام التطبيق"، ثم أعد المحاولة.';
+          msg = 'إذن الوصول للموقع مرفوض. افتح إعدادات الهاتف ← التطبيقات ← Cus-Follow ← الأذونات ← الموقع، واختر "السماح أثناء استخدام التطبيق"، ثم أعد المحاولة.';
         } else if (geoErr && geoErr.code === 2) {
           msg = 'تعذر الوصول لخدمة الموقع. تأكد من تفعيل GPS في الهاتف ومن أنك لست في مكان مغلق تماماً.';
         } else if (geoErr && geoErr.code === 3) {

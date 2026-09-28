@@ -1,7 +1,7 @@
 import React from 'react';
 
 /**
- * شعار Cust Follow — صورة الهوية الرسمية.
+ * شعار Cus-Follow — صورة الهوية الرسمية.
  *
  * ملفان في public/ مشتقّان من resources/icon.png (الأيقونة نفسها بمقاسين):
  *   logo-mark.png  128px — للترويسة (تُعرض 38px)
@@ -31,7 +31,7 @@ export const LogoMark: React.FC<LogoMarkProps> = ({
 }) => (
   <img
     src={variant === 'full' ? './logo.png' : './logo-mark.png'}
-    alt="Cust Follow"
+    alt="Cus-Follow"
     width={size}
     height={size}
     className={className}
@@ -59,7 +59,7 @@ const Logo: React.FC<LogoProps> = ({ size = 40, tone = 'dark', showSub = true, c
   <div className={`flex items-center gap-2.5 ${className}`}>
     <LogoMark size={size} />
     <div className="leading-none">
-      <div className="ut-brand" style={{ fontSize: Math.round(size * 0.46) }}>Cust Follow</div>
+      <div className="ut-brand" style={{ fontSize: Math.round(size * 0.46) }}>Cus-Follow</div>
       {showSub && (
         <div
           style={{

@@ -779,7 +779,7 @@ const App: React.FC = () => {
             <LogoMark size={38} />
             <div className="leading-none">
               <div className="flex items-center gap-2">
-                <h1 className="ut-brand" style={{ fontSize: 19 }}>Cust Follow</h1>
+                <h1 className="ut-brand" style={{ fontSize: 19 }}>Cus-Follow</h1>
                 {isSyncing ? (
                   <span className="ut-chip ut-chip--brand">
                     <RefreshCw size={11} className="animate-spin" /> مزامنة
@@ -875,7 +875,7 @@ const App: React.FC = () => {
             className="ut-install md:hidden w-full text-white py-3.5 min-h-[44px] text-sm font-bold flex justify-center items-center gap-2"
             style={{ borderRadius: 0 }}
           >
-            <Download size={16} /> {isIos ? 'تثبيت Cust Follow على الآيفون' : 'تثبيت Cust Follow على هاتفك'}
+            <Download size={16} /> {isIos ? 'تثبيت Cus-Follow على الآيفون' : 'تثبيت Cus-Follow على هاتفك'}
           </button>
         )}
 
@@ -996,7 +996,7 @@ const App: React.FC = () => {
       </main>
       
       <footer className="py-4 text-center relative z-10 text-slate-500 text-[10px] font-bold pb-6">
-        <p>Cust Follow &copy; 2026</p>
+        <p>Cus-Follow &copy; 2026</p>
         <p className="mt-0.5 opacity-70">RTM Team - Bahaa Mohamed-Tel: 01095665450</p>
       </footer>
 
@@ -1072,7 +1072,7 @@ const App: React.FC = () => {
             <p>1. افتح "إعدادات الهاتف" (Settings).</p>
             <p>2. اذهب إلى "خيارات المطور" (Developer Options) أو "النظام".</p>
             <p>3. قم بـ **إيقاف/تعطيل** خيارات المطور (Developer Options Off).</p>
-            <p>4. عد لتطبيق Cust Follow واضغط إعادة الفحص بالأسفل.</p>
+            <p>4. عد لتطبيق Cus-Follow واضغط إعادة الفحص بالأسفل.</p>
           </div>
           {/* التدرّج مكتوب هنا لا عبر bg-red-600: skin.css يفرض على
               button.bg-red-600 تدرّجاً يبدأ بـ #EF4444 بـ !important، والأبيض
