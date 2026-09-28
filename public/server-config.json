@@ -3,9 +3,9 @@
   "syncUrl": "https://script.google.com/macros/s/AKfycbyO5tFeXuSeN7z4i44aj3jjCzam6k09sNnIcOM21oMzw8qJ-bzEAR7hSuth-P2yRSC22A/exec",
   "auditLogUrl": "1QFFCTZrr3tvXK1J3YoiZMZ2oO8PlTdIV-5Hrg7f3xXc",
 
-  "latestVersionCode": 0,
-  "latestVersionName": "",
-  "apkUrl": "",
+  "latestVersionCode": 2,
+  "latestVersionName": "1.0.2",
+  "apkUrl": "https://github.com/rtmteam/Cus-Follow/releases/download/v1.0.2/Cus-Follow.apk",
   "updateNotes": "",
   "updateMandatory": false,
 
