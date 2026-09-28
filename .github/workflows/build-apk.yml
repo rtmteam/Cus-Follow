@@ -53,6 +53,11 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # الافتراضي يثبّت حزمة 'tools' القديمة التي حُذفت من أدوات أندرويد
+          # الحديثة (cmdline-tools 16) فيفشل البناء. الحزم اللازمة فعلاً
+          # تُثبَّت في الخطوة التالية.
+          packages: 'platform-tools'
 
       - name: Install Android SDK Platform 36
         run: |
