@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { User, Customer, VisitReason, Visit } from '../types';
 import { MapPin, Clock, CheckCircle, AlertCircle, Cloud, FileText, Search, Store, DoorOpen, DoorClosed, Wallet, AlertTriangle, CalendarClock, UserRound, MessageSquare, Ban, ChevronDown, Navigation } from 'lucide-react';
 import { calculateDistance, getDeviceFingerprint, getEgyptTime, getRealNetworkTime, checkDeveloperOptionsStatus, checkMockLocationStatus } from '../utils';
+import { beginServerRequest, endServerRequest, wakeServer } from '../api';
 
 interface UserDashboardProps {
   user: User;
@@ -316,6 +317,12 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
 
   const selectedCustomer = myCustomers.find((c) => c.id === selectedCustomerId) || null;
 
+  // اختيار العميل يسبق «فتح زيارة» بثوانٍ — نوقظ الخادم الآن فيجده جاهزاً.
+  // (wakeServer لا يرسل شيئاً إن كان هناك اتصال بالخادم خلال الدقيقة الأخيرة.)
+  useEffect(() => {
+    if (selectedCustomerId) wakeServer(googleSheetLink);
+  }, [selectedCustomerId, googleSheetLink]);
+
   const radiusOf = (c: Customer) => (c.radius && c.radius > 0 ? c.radius : customerRadius || 100);
 
   const distanceTo = (c: Customer | null): number | null => {
@@ -420,6 +427,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
     const timeoutId = setTimeout(() => controller.abort(), VISIT_TIMEOUT_MS);
 
     let response: Response;
+    beginServerRequest(); // سجلّ المراقبة لا يُرسَل أثناء أمر الزيارة
     try {
       response = await fetch(googleSheetLink, {
         method: 'POST',
@@ -429,6 +437,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
       });
     } finally {
       clearTimeout(timeoutId);
+      endServerRequest();
     }
 
     if (response.status === 404) throw new Error('SERVER_404');

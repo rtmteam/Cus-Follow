@@ -1,10 +1,8 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { AppConfig, Customer } from '../types';
+import { AppConfig } from '../types';
 import {
-  Table, Download, LogIn, Loader2, AlertCircle, Filter, RefreshCw, ShieldCheck,
-  FileSpreadsheet, Eye, EyeOff, Store, DoorOpen, DoorClosed, Ban, Clock,
-  Wallet, AlertTriangle, ChevronDown, Search, X, Users
+  Table, Download, LogIn, Loader2, AlertCircle, Filter, RefreshCw, ShieldCheck, FileSpreadsheet, Eye, EyeOff, Store, DoorOpen, DoorClosed, Ban, Clock, AlertTriangle, ChevronDown, Search, X, Users
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -181,7 +179,6 @@ const ReportsView: React.FC<ReportsViewProps> = ({
   const [error, setError] = useState('');
 
   const [visits, setVisits] = useState<VisitRow[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
 
   // ---------- المرشّحات ----------
   const [fromDate, setFromDate] = useState('');
@@ -220,7 +217,6 @@ const ReportsView: React.FC<ReportsViewProps> = ({
       }
 
       setVisits(Array.isArray(data.visits) ? data.visits : []);
-      setCustomers(Array.isArray(data.customers) ? data.customers : []);
       // الخادم يقول صراحةً هل الحساب مسؤول — كلمة مرور المسؤول لم تعد
       // مشحونة في التطبيق لتُقارَن هنا
       setIsAdminLogin(data.isAdmin === true);

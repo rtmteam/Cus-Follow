@@ -4,10 +4,10 @@ import { User, Branch, AppConfig, Job, ReportAccount, Customer, VisitReason, Vis
 import Login from './components/Login';
 import UserDashboard from './components/UserDashboard';
 import { LazyAdminDashboard, LazyReportsView, ScreenLoader } from './components/LazyScreens';
-import { ShieldCheck, User as UserIcon, Cloud, CloudOff, RefreshCw, FileSpreadsheet, Home, Download, Share, PlusSquare, X, Wifi, LogOut, ShieldAlert, AlertTriangle, Smartphone, Settings } from 'lucide-react';
+import { CloudOff, RefreshCw, Home, Download, Share, PlusSquare, X, LogOut, ShieldAlert, Smartphone, Settings } from 'lucide-react';
 import { syncTimeWithServer, checkDeveloperOptionsStatus, getDeviceFingerprint } from './utils';
 import { LogoMark } from './components/Logo';
-import { postJson, SESSION_INVALID_CODES } from './api';
+import { postJson, SESSION_INVALID_CODES, configureAudit, queueAudit } from './api';
 
 /**
  * ترحيل مفاتيح التخزين من بادئة `attendance_` إلى `cusfollow_`.
@@ -156,7 +156,6 @@ const App: React.FC = () => {
   const [loginNotice, setLoginNotice] = useState('');
 
   const [isSyncing, setIsSyncing] = useState(false);
-  const [syncError, setSyncError] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [activeView, setActiveView] = useState<'main' | 'reports'>('main');
   const [installPrompt, setInstallPrompt] = useState<any>(null);
@@ -388,14 +387,12 @@ const App: React.FC = () => {
     const user = currentUserRef.current;
     if (!url || !url.startsWith('http') || !user) return null;
     if (!navigator.onLine) {
-      setSyncError(true);
       return null;
     }
 
     const seq = ++syncSeqRef.current;
     const startedAt = Date.now();
     setIsSyncing(true);
-    setSyncError(false);
 
     try {
       const payload = user.role === 'admin'
@@ -420,7 +417,6 @@ const App: React.FC = () => {
       if (!now || now.id !== user.id || now.role !== user.role) return null;
 
       if (!data || data.status !== 'ok') {
-        setSyncError(true);
         if (data && SESSION_INVALID_CODES.includes(data.code)) {
           forceLogout(data.message || 'انتهت صلاحية الدخول. سجّل الدخول من جديد.');
         }
@@ -435,7 +431,6 @@ const App: React.FC = () => {
       }
       return data;
     } catch (err) {
-      setSyncError(true);
       if ((err as any)?.name === 'AbortError') {
         console.warn('Sync timed out after', timeoutMs, 'ms');
       } else {
@@ -652,29 +647,19 @@ const App: React.FC = () => {
   useEffect(() => { localStorage.setItem('cusfollow_branches', JSON.stringify(branches)); }, [branches]);
   useEffect(() => { localStorage.setItem('cusfollow_jobs', JSON.stringify(jobs)); }, [jobs]);
 
-  const logAction = useCallback(async (action: string, details: string = '') => {
-    if (!config.syncUrl || !navigator.onLine) return;
-    
-    try {
-      const payload = {
-        action: 'logAudit',
-        user: currentUser ? `${currentUser.fullName} (${currentUser.role})` : 'Guest',
-        auditAction: action,
-        details: details,
-        deviceInfo: navigator.userAgent,
-        spreadsheetId: config.auditLogUrl || ''
-      };
-      
-      await fetch(config.syncUrl, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-    } catch (e) {
-      console.error('Audit Log Error:', e);
-    }
-  }, [config.syncUrl, config.auditLogUrl, currentUser]);
+  // سجلّ المراقبة: السطر يُحفظ على الهاتف فوراً ويُرسَل دفعةً واحدة لاحقاً
+  // (انظر queueAudit في api.ts) — لا طلب منفصل يزاحم الدخول أو أمر الزيارة.
+  useEffect(() => {
+    configureAudit(config.syncUrl, config.auditLogUrl);
+  }, [config.syncUrl, config.auditLogUrl]);
+
+  const logAction = useCallback((action: string, details: string = '') => {
+    queueAudit(
+      currentUser ? `${currentUser.fullName} (${currentUser.role})` : 'Guest',
+      action,
+      details
+    );
+  }, [currentUser]);
 
   /**
    * دخول ناجح تحقّق منه الخادم.

@@ -1,7 +1,7 @@
 
 import React, { useState, useRef } from 'react';
 import { Branch, AppConfig, User, Job, ReportAccount, Customer } from '../types';
-import { MapPin, Table, Trash2, Shield, CloudUpload, Briefcase, RotateCcw, Globe, Users, Plus, FileSpreadsheet, Download, Share2, Smartphone, RefreshCw, Edit2, Check, X, Unlink, Key, Lock, Eye, EyeOff, Clock, Monitor, UserCheck, Calendar, Navigation, ArrowUp, ArrowDown, GripVertical, KeyRound, Loader2, Store, Search, Wallet, AlertTriangle } from 'lucide-react';
+import { MapPin, Trash2, Shield, CloudUpload, Briefcase, RotateCcw, Users, Plus, FileSpreadsheet, Download, Smartphone, Edit2, Check, X, Unlink, Key, Eye, EyeOff, Monitor, UserCheck, GripVertical, KeyRound, Loader2, Store, Search, AlertTriangle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import ReportsView from './ReportsView';
 
@@ -194,7 +194,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [editReportData, setEditReportData] = useState<Partial<ReportAccount>>({});
   const [editingBranchId, setEditingBranchId] = useState<string | null>(null);
   const [editBranchData, setEditBranchData] = useState<Partial<Branch>>({});
-  const [syncUrl, setSyncUrl] = useState(config.syncUrl || '');
   
   // State for Branch Bulk Delete
   const [selectedBranches, setSelectedBranches] = useState<Set<string>>(new Set());
@@ -226,18 +225,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   ] as const;
 
   // وظيفة لتنسيق الوقت للعرض (AM/PM)
-
-  const normalizeToTimeInput = (timeStr: string | undefined): string => {
-    if (!timeStr) return "09:00";
-    if (timeStr.includes('GMT') || timeStr.includes('1899')) {
-      const d = new Date(timeStr);
-      if (!isNaN(d.getTime())) {
-        return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
-      }
-    }
-    const match = timeStr.match(/(\d{2}:\d{2})/);
-    return match ? match[1] : timeStr;
-  };
 
   const pushToCloud = async (dataType?: string) => {
     if (!config.syncUrl) return alert("يرجى ضبط رابط المزامنة أولاً");

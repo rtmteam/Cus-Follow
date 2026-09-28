@@ -1,21 +1,24 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { User, AppConfig } from '../types';
 import { LogIn, LogOut, ShieldAlert, Loader2, Smartphone, AlertCircle, WifiOff, Eye, EyeOff, FileSpreadsheet, KeyRound, Info } from 'lucide-react';
 import { getDeviceFingerprint } from '../utils';
 import { LogoMark } from './Logo';
 import { LazyReportsView, ScreenLoader } from './LazyScreens';
-import { postJson, describeConnectionError } from '../api';
+import { postJson, describeConnectionError, wakeServer } from '../api';
 
 /**
  * مهلة طلب الدخول.
  *
- * الدخول صار طلباً واحداً للخادم: يتحقّق ويربط الجهاز ويُعيد بيانات
- * الموظف معاً. عشرون ثانية تكفي شبكة ضعيفة ولا تُجمّد الزر بلا نهاية.
- * الطلب آمن للإعادة: لو انقطع الردّ بعد ربط الجهاز، فالمحاولة الثانية تجده
- * مربوطاً فتنجح.
+ * الدخول طلب واحد للخادم: يتحقّق ويربط الجهاز ويُعيد بيانات الموظف معاً.
+ * كانت ٢٠ ثانية، لكن قيس في ٢٨ سبتمبر أن الخادم النائم يستيقظ في ١٥–١٧
+ * ثانية، فكانت المهلة تنتهي على بيانات الهاتف قبل وصول ردّ سليم. الطلب آمن
+ * للإعادة: لو انقطع الردّ بعد ربط الجهاز، فالمحاولة الثانية تجده مربوطاً.
  */
-const LOGIN_TIMEOUT_MS = 20000;
+const LOGIN_TIMEOUT_MS = 40000;
+
+/** بعدها تتغيّر رسالة الانتظار — الطلب ما زال جارياً ولم يفشل */
+const SLOW_HINT_MS = 8000;
 
 interface LoginProps {
   /**
@@ -56,6 +59,18 @@ export default function Login({
   const [isLoading, setIsLoading] = useState(false);
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [showAdminPassword, setShowAdminPassword] = useState(false);
+  const [isSlow, setIsSlow] = useState(false);
+
+  // إيقاظ الخادم لحظة ظهور شاشة الدخول: يكتب الموظف رقمه وكلمة مروره
+  // (١٠–٢٠ ثانية عادةً) بينما يستيقظ الخادم، فيجده جاهزاً حين يضغط «دخول».
+  const wakeUrl = adminConfig.syncUrl || adminConfig.googleSheetLink;
+  useEffect(() => { wakeServer(wakeUrl); }, [wakeUrl]);
+
+  useEffect(() => {
+    if (!isLoading) { setIsSlow(false); return; }
+    const t = setTimeout(() => setIsSlow(true), SLOW_HINT_MS);
+    return () => clearTimeout(t);
+  }, [isLoading]);
 
   // ---------- استعادة كلمة المرور ----------
   // شاشة من خطوتين: تحقّق من الهوية والجهاز، ثم تعيين كلمة جديدة.
@@ -444,7 +459,7 @@ export default function Login({
 
           {isLoading && (
             <div className="mb-4 p-3 bg-blue-900/20 border border-blue-500/50 rounded-2xl flex items-center justify-center gap-2 text-blue-400 text-xs font-bold">
-              <Loader2 className="animate-spin" size={16} /> جارٍ المعالجة والتحقق…
+              <Loader2 className="animate-spin" size={16} /> {isSlow ? 'جارٍ الاتصال…' : 'جارٍ المعالجة والتحقق…'}
             </div>
           )}
 

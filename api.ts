@@ -1,3 +1,5 @@
+import { getRealNetworkTime } from './utils';
+
 /**
  * نداء الخادم بطلب POST وقراءة ردّه JSON.
  *
@@ -14,6 +16,7 @@ export const postJson = async (url: string, payload: unknown, timeoutMs: number)
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   let response: Response;
+  beginServerRequest();
   try {
     response = await fetch(url, {
       method: 'POST',
@@ -23,6 +26,7 @@ export const postJson = async (url: string, payload: unknown, timeoutMs: number)
     });
   } finally {
     clearTimeout(timer);
+    endServerRequest();
   }
 
   if (response.status === 404) throw new Error('SERVER_404');
@@ -57,4 +61,149 @@ export const describeConnectionError = (err: any): string => {
   if (err?.message === 'INVALID_RESPONSE') return 'الرابط المسجل لا يؤدي إلى كود النظام. راجع المسؤول.';
   if (err?.message === 'OLD_SERVER_CODE') return 'كود الخادم المنشور أقدم من التطبيق. راجع المسؤول لنشر التحديث.';
   return 'تعذّر الاتصال بالخادم. تأكد من الإنترنت وحاول مجدداً.';
+};
+
+// =====================================================================
+//  الطلبات المهمة الجارية — سجلّ المراقبة لا يُرسَل أثناءها
+// =====================================================================
+//
+// قيس في ٢٨ سبتمبر: خمسة طلبات متزامنة للخادم ← واحد منها استغرق ١٧ ثانية
+// (جوجل تشغّل نسخة جديدة من السكربت للطلب الزائد). فسطر السجل الذي كان
+// يُرسَل مع الدخول وفتح الزيارة في اللحظة نفسها كان يُبطئ أحدهما.
+
+let inFlight = 0;
+let lastServerContact = 0;
+
+/** يُعلَّم عند بدء طلب مهم (دخول · مزامنة · أمر زيارة) */
+export const beginServerRequest = (): void => { inFlight++; };
+
+/** يُعلَّم عند انتهائه — نجح أو فشل */
+export const endServerRequest = (): void => {
+  inFlight = Math.max(0, inFlight - 1);
+  lastServerContact = Date.now();
+  if (inFlight === 0) scheduleAuditFlush(AUDIT_QUIET_MS);
+};
+
+// =====================================================================
+//  إيقاظ الخادم مبكراً
+// =====================================================================
+//
+// Apps Script ينام بعد دقائق بلا طلبات، وأول طلب بعدها ٦–١٧ ثانية بدل ٢–٣.
+// طلب ping صغير لا يلمس الشيت يُرسَل حين نعرف أن طلباً مهماً قادم (فتح شاشة
+// الدخول · اختيار عميل)، فيكون الخادم قد استيقظ لحظة الضغط.
+
+const PING_EVERY_MS = 60000;
+let lastPing = 0;
+
+export const wakeServer = (url: string | undefined): void => {
+  if (!url || !url.startsWith('http')) return;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+  const now = Date.now();
+  // لا داعي إن كان هناك طلب جارٍ أو اتصال حديث — الخادم مستيقظ
+  if (inFlight > 0 || now - lastPing < PING_EVERY_MS || now - lastServerContact < PING_EVERY_MS) return;
+  lastPing = now;
+  const sep = url.includes('?') ? '&' : '?';
+  // no-cors: لا نحتاج الردّ، ولا نريد أي فحص CORS يؤخّر الطلب
+  fetch(url + sep + 'action=ping', { method: 'GET', mode: 'no-cors', cache: 'no-store' }).catch(() => {});
+};
+
+// =====================================================================
+//  سجلّ المراقبة — طابور على الهاتف يُرسَل دفعةً واحدة
+// =====================================================================
+//
+// كان كل سطر طلباً مستقلاً يُرسَل فوراً — مع الدخول ومع فتح الزيارة نفسها —
+// ويفتح ملف السجل المنفصل من جديد في كل مرة. الآن: السطر يُحفظ على الهاتف
+// بوقت حدوثه، ويُرسَل الطابور دفعةً واحدة بعد هدوء ٥ ثوانٍ ولا شيء مهم جارٍ.
+// فشل الإرسال لا يُضيّع شيئاً: يبقى الطابور ويُعاد لاحقاً.
+
+const AUDIT_KEY = 'cusfollow_audit_queue';
+const AUDIT_MAX = 200;       // أقصى ما يُحفظ على الهاتف (الأقدم يسقط أولاً)
+const AUDIT_BATCH = 50;      // أقصى ما يُرسَل في طلب واحد
+const AUDIT_QUIET_MS = 5000; // هدوء قبل الإرسال
+const AUDIT_RETRY_MS = 30000;
+
+interface AuditEntry {
+  id: string;
+  at: string;
+  user: string;
+  auditAction: string;
+  details: string;
+  deviceInfo: string;
+}
+
+let auditUrl = '';
+let auditSheetId = '';
+let auditTimer: ReturnType<typeof setTimeout> | null = null;
+let auditFlushing = false;
+
+const readAuditQueue = (): AuditEntry[] => {
+  try {
+    const q = JSON.parse(localStorage.getItem(AUDIT_KEY) || '[]');
+    return Array.isArray(q) ? q : [];
+  } catch { return []; }
+};
+
+const writeAuditQueue = (q: AuditEntry[]): void => {
+  try { localStorage.setItem(AUDIT_KEY, JSON.stringify(q.slice(-AUDIT_MAX))); } catch { /* الذاكرة ممتلئة — نتجاوز */ }
+};
+
+/** رابط الخادم ومعرّف ملف السجل — يُضبطان كلما تغيّرت الإعدادات */
+export const configureAudit = (url: string | undefined, sheetId: string | undefined): void => {
+  auditUrl = url || '';
+  auditSheetId = sheetId || '';
+  if (auditUrl) scheduleAuditFlush(AUDIT_QUIET_MS); // ما تبقّى من جلسة سابقة
+};
+
+/** يضيف سطراً للطابور — لا ينتظر شيئاً ولا يرسل فوراً */
+export const queueAudit = (user: string, auditAction: string, details: string): void => {
+  const q = readAuditQueue();
+  q.push({
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+    at: getRealNetworkTime().toISOString(),
+    user,
+    auditAction,
+    details,
+    deviceInfo: typeof navigator !== 'undefined' ? navigator.userAgent : ''
+  });
+  writeAuditQueue(q);
+  scheduleAuditFlush(AUDIT_QUIET_MS);
+};
+
+export const scheduleAuditFlush = (ms: number): void => {
+  if (auditTimer) clearTimeout(auditTimer);
+  auditTimer = setTimeout(() => { auditTimer = null; flushAudit(); }, ms);
+};
+
+const flushAudit = async (): Promise<void> => {
+  if (auditFlushing || !auditUrl || !auditUrl.startsWith('http')) return;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) { scheduleAuditFlush(AUDIT_RETRY_MS); return; }
+  if (inFlight > 0) return; // endServerRequest يعيد الجدولة عند انتهاء الطلب المهم
+
+  const batch = readAuditQueue().slice(0, AUDIT_BATCH);
+  if (batch.length === 0) return;
+
+  auditFlushing = true;
+  let sent = false;
+  try {
+    const res = await fetch(auditUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'logAuditBatch', entries: batch, spreadsheetId: auditSheetId })
+    });
+    const text = res.ok ? await res.text() : '';
+    sent = text.includes('Audit Logged');
+  } catch { sent = false; }
+  auditFlushing = false;
+  lastServerContact = Date.now();
+
+  if (sent) {
+    // الحذف بالمعرّف لا بالعدد: قد تُضاف سطور جديدة أثناء الإرسال
+    const done = new Set(batch.map(e => e.id));
+    const rest = readAuditQueue().filter(e => !done.has(e.id));
+    writeAuditQueue(rest);
+    if (rest.length > 0) scheduleAuditFlush(1000);
+  } else {
+    // خادم لم يُحدَّث بعد، أو شبكة — يبقى الطابور ويُعاد لاحقاً
+    scheduleAuditFlush(AUDIT_RETRY_MS);
+  }
 };

@@ -17,13 +17,6 @@ export const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2
   return R * c;
 };
 
-export const formatDate = (dateStr: string) => {
-  return new Intl.DateTimeFormat('en-US', {
-    dateStyle: 'full',
-    timeStyle: 'short',
-  }).format(new Date(dateStr));
-};
-
 /**
  * يحصل على معرف الجهاز الحقيقي والفريد غير القابل للتكرار أو التغير لنفس الهاتف
  * يدعم القراءة المباشرة من نظام الأندرويد (Android ID / Native Hardware)
@@ -249,7 +242,6 @@ export const checkMockLocationStatus = (position?: GeolocationPosition): { isFak
 let syncBaseTimeMs = Date.now();
 let syncBasePerfMs = performance.now();
 let lastSavedTimeMs = 0;
-let hasSyncedWithServer = false;
 
 // 1. تحميل الفرق المخزن مسبقاً من التخزين المحلي لتسهيل العمل فوراً
 const savedOffsetStr = localStorage.getItem('uniteam_time_offset');
@@ -303,7 +295,6 @@ export const syncTimeWithServer = async (prefetched?: { res: Response; startTime
       // تحديث نقاط الأساس في الذاكرة
       syncBaseTimeMs = adjustedServerTime;
       syncBasePerfMs = endTime;
-      hasSyncedWithServer = true;
       console.log('Time synced with app server. Base:', new Date(syncBaseTimeMs).toISOString());
       return;
     }
@@ -328,7 +319,6 @@ export const syncTimeWithServer = async (prefetched?: { res: Response; startTime
         // تحديث نقاط الأساس في الذاكرة
         syncBaseTimeMs = adjustedServerTime;
         syncBasePerfMs = endTime;
-        hasSyncedWithServer = true;
         console.log('Time synced with WorldTimeAPI (Egypt). Base:', new Date(syncBaseTimeMs).toISOString());
         return;
       }
