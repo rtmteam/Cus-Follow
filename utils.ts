@@ -282,12 +282,14 @@ syncBasePerfMs = performance.now();
 /**
  * مزامنة وقت التطبيق مع خوادم موثوقة (خادم التطبيق أو API عامة)
  */
-export const syncTimeWithServer = async () => {
-  const startTime = performance.now();
+export const syncTimeWithServer = async (prefetched?: { res: Response; startTime: number }) => {
+  const startTime = prefetched ? prefetched.startTime : performance.now();
   
   // المحاولة 1: جلب الوقت من خادم التطبيق المحلي (سريع وموثوق جداً ومحمي من جدار الحماية)
+  // إن مُرِّر ردّ جاهز (طلب server-config.json الذي يُجرى عند الفتح أصلاً) يُقرأ
+  // تاريخه منه، فلا يُرسل طلب ثانٍ لنفس الملف.
   try {
-    const res = await fetch('/server-config.json?t=' + Date.now(), { method: 'HEAD' });
+    const res = prefetched ? prefetched.res : await fetch('./server-config.json?t=' + Date.now(), { method: 'HEAD' });
     const serverDateHeader = res.headers.get('date');
     if (serverDateHeader) {
       const serverTime = new Date(serverDateHeader).getTime();

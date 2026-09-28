@@ -1,7 +1,7 @@
 
 // رفع الرقم يمسح كل النسخ القديمة من الكاش عند التفعيل.
 // ارفعه بعد أي تعديل على ملف يحمل الاسم نفسه ولا يتغير اسمه مع البناء.
-const CACHE_NAME = 'uniteam-cache-v11';
+const CACHE_NAME = 'uniteam-cache-v12';
 
 // التخزين المسبق يقتصر على صفحة الدخول لتعمل دون اتصال.
 // لا يُخزَّن هنا manifest.json ولا ملفات الأيقونات: أسماؤها ثابتة،
@@ -79,29 +79,53 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 2) التنقّل بين الصفحات
+  // 2) التنقّل بين الصفحات (فتح التطبيق)
   //
-  //    الشبكة أولاً، لكن مع فحص رمز الاستجابة أيضاً لا الأخطاء الشبكية وحدها.
-  //    السبب أن إيقاف نشر الموقع يجعل الخادم يعيد 404 ومعه صفحة خطأ كاملة،
-  //    وهذه استجابة "ناجحة" تقنياً فلا يلتقطها catch، فتظهر صفحة الخادم للموظف.
+  //    الشبكة أولاً — لكن بحدّ ٣ ثوانٍ. كانت بلا حدّ: على إشارة ضعيفة ينتظر
+  //    الموظف شاشة فارغة حتى يصل ردّ الصفحة الرئيسية (١٣ ثانية في المحاكاة)
+  //    مع أن التطبيق كله محفوظ على هاتفه. الآن: إن تأخّرت الشبكة تُعرض النسخة
+  //    المحفوظة فوراً، ويكمل الطلب في الخلفية ليُحدّث النسخة للمرة القادمة.
+  //
+  //    ولا يزال رمز الاستجابة يُفحص: إيقاف نشر الموقع يُعيد 404 بصفحة كاملة
+  //    تُعتبر "نجاحاً" تقنياً، فتُعرض صفحة الانقطاع بدلها.
+  //
+  //    وضع الصيانة لا يتأثر: يُقرأ من server-config.json وهو من الشبكة أولاً دائماً.
   if (event.request.mode === 'navigate') {
+    const network = fetch(event.request)
+      .then(function (response) {
+        if (response && response.ok) {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then(function (cache) { cache.put('./index.html', copy); });
+        }
+        return response;
+      });
+    // يكمل الطلب ويُحدّث النسخة المحفوظة حتى لو عُرضت القديمة
+    event.waitUntil(network.catch(function () {}));
+
+    const offlinePage = function () {
+      return caches.match('./offline.html', { ignoreSearch: true });
+    };
+    const fromNetwork = network
+      .then(function (response) {
+        if (response && response.ok) return response;
+        // الخادم ردّ بخطأ (404 عند إيقاف النشر، أو 5xx عند تعطّله)
+        return offlinePage().then(function (page) { return page || response; });
+      })
+      .catch(function () {
+        // فشل شبكي حقيقي: لا اتصال بالإنترنت
+        return offlinePage().then(function (page) {
+          return page || caches.match('./index.html', { ignoreSearch: true });
+        });
+      });
+
     event.respondWith(
-      fetch(event.request)
-        .then(function (response) {
-          if (response && response.ok) {
-            return response;
-          }
-          // الخادم رد بخطأ (404 عند إيقاف النشر، أو 5xx عند تعطّله)
-          return caches.match('./offline.html', { ignoreSearch: true })
-            .then(function (page) { return page || response; });
-        })
-        .catch(function () {
-          // فشل شبكي حقيقي: لا اتصال بالإنترنت
-          return caches.match('./offline.html', { ignoreSearch: true })
-            .then(function (page) {
-              return page || caches.match('./index.html', { ignoreSearch: true });
-            });
-        })
+      caches.match('./index.html', { ignoreSearch: true }).then(function (cached) {
+        if (!cached) return fromNetwork; // أول فتح: لا نسخة محفوظة بعد
+        const timeout = new Promise(function (resolve) {
+          setTimeout(function () { resolve(cached); }, 3000);
+        });
+        return Promise.race([fromNetwork, timeout]);
+      })
     );
     return;
   }

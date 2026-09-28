@@ -4,7 +4,7 @@
   "webDir": "dist",
   "bundledWebRuntime": false,
   "server": {
-    "url": "https://bahaamohamed51-coder.github.io/Cus-Follow/",
+    "url": "https://rtmteam.github.io/Cus-Follow/",
     "cleartext": true,
     "androidScheme": "https",
     "errorPath": "offline.html"

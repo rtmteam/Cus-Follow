@@ -1132,7 +1132,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       );
                     }
 
-                    return shown.map(c => {
+                    // عرض أول ٢٠٠ صفّ فقط: رسم آلاف الصفوف دفعة واحدة يُجمّد الصفحة.
+                    // البحث يعمل على كل العملاء، والتعديل والحفظ لا يتأثران.
+                    const LIMIT = 200;
+                    const limited = shown.slice(0, LIMIT);
+                    const rows = limited.map(c => {
                       const isEditing = editingCustomerId === c.id;
                       const missingGeo = !c.latitude || !c.longitude;
                       return (
@@ -1234,6 +1238,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </tr>
                       );
                     });
+                    if (shown.length > LIMIT) {
+                      rows.push(
+                        <tr key="__more">
+                          <td colSpan={8} className="py-4 text-center text-xs font-bold text-slate-400">
+                            يُعرض {LIMIT} من {shown.length} عميل — اكتب في البحث (كود أو اسم أو توكيل) للوصول لأي عميل.
+                          </td>
+                        </tr>
+                      );
+                    }
+                    return rows;
                   })()}
                 </tbody>
               </table>

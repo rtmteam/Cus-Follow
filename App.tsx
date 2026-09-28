@@ -68,6 +68,61 @@ const readAdminSession = (): { username: string; password: string } | null => {
 const SYNC_TIMEOUT_MS = 30000;
 
 /**
+ * البيانات الأساسية المحفوظة على الهاتف (العملاء · الأسباب) ومعها رقم نسختها.
+ *
+ * كل مزامنة ترسل الرقم؛ إن لم تتغيّر البيانات على الخادم لم يُرسلها ثانيةً.
+ * شبكة أمان: مزامنة كاملة إجبارية كل ١٢ ساعة، وبزر «تحديث»، وعند الدخول.
+ */
+const DATA_VERSION_KEY = 'cusfollow_data_version';
+const DATA_OWNER_KEY = 'cusfollow_data_owner';
+const FULL_SYNC_AT_KEY = 'cusfollow_full_sync_at';
+const FULL_SYNC_EVERY_MS = 12 * 60 * 60 * 1000;
+
+/** الرقم المحفوظ — يُرسل فقط إن كان لهذا المستخدم ولم يمضِ عليه ١٢ ساعة */
+const readKnownDataVersion = (userId: string): string | undefined => {
+  try {
+    if (localStorage.getItem(DATA_OWNER_KEY) !== userId) return undefined;
+    const at = Number(localStorage.getItem(FULL_SYNC_AT_KEY)) || 0;
+    if (Date.now() - at > FULL_SYNC_EVERY_MS) return undefined;
+    if (localStorage.getItem('uniteam_customers') === null) return undefined;
+    const v = localStorage.getItem(DATA_VERSION_KEY);
+    return v ? v : undefined;
+  } catch (e) {
+    return undefined;
+  }
+};
+
+/**
+ * الجلسة المحفوظة تُقرأ قبل أول رسم.
+ * كانت تُقرأ بعده، فترتسم شاشة الدخول لحظة ثم تُستبدل بشاشة الموظف عند كل فتح.
+ * جلسة المسؤول لا تُستعاد إلا وكلمة مروره في ذاكرة هذه النافذة.
+ */
+const readSavedUser = (): User | null => {
+  try {
+    const raw = localStorage.getItem('cusfollow_current_user');
+    if (!raw) return null;
+    const parsed: User = JSON.parse(raw);
+    if (parsed.role === 'admin' && !readAdminSession()) {
+      localStorage.removeItem('cusfollow_current_user');
+      return null;
+    }
+    return parsed;
+  } catch (e) {
+    return null;
+  }
+};
+
+/** قراءة JSON محفوظ بلا رمي استثناء */
+const readJson = <T,>(key: string, fallback: T): T => {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch (e) {
+    return fallback;
+  }
+};
+
+/**
  * مهلة مزامنة التحقّق.
  *
  * تُستدعى بعد فشل غامض في أمر زيارة لتسأل الخادم ماذا حدث فعلاً.
@@ -78,15 +133,16 @@ const VERIFY_SYNC_TIMEOUT_MS = 15000;
 // ==========================================
 
 const App: React.FC = () => {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(() => readSavedUser());
   const [branches, setBranches] = useState<Branch[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [reportAccounts, setReportAccounts] = useState<ReportAccount[]>([]);
   const [allUsers, setAllUsers] = useState<User[]>([]);
 
   // ---------- متابعة العملاء ----------
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [visitReasons, setVisitReasons] = useState<VisitReason[]>([]);
+  // قائمة العملاء والأسباب تُقرأ قبل أول رسم — الموظف يرى عملاءه فوراً
+  const [customers, setCustomers] = useState<Customer[]>(() => readJson<Customer[]>('uniteam_customers', []));
+  const [visitReasons, setVisitReasons] = useState<VisitReason[]>(() => readJson<VisitReason[]>('uniteam_visit_reasons', []));
   /** الزيارات المفتوحة على الخادم — شاشة الموظف تستعيد منها زيارته */
   const [openVisits, setOpenVisits] = useState<Visit[]>([]);
   /**
@@ -167,7 +223,7 @@ const App: React.FC = () => {
 
   // مراجع تقرؤها المزامنة وقت التنفيذ — فتبقى دالتها ثابتة لا تُعاد صناعتها
   // مع كل تغيّر في الحالة. إعادة صناعتها كانت تُطلق التأثيرات المعتمدة عليها.
-  const currentUserRef = useRef<User | null>(null);
+  const currentUserRef = useRef<User | null>(currentUser);
   const configRef = useRef<AppConfig>(config);
   const syncSeqRef = useRef(0);
   useEffect(() => { configRef.current = config; }, [config]);
@@ -220,6 +276,14 @@ const App: React.FC = () => {
 
   /** يطبّق بيانات الموظف القادمة من الخادم (login أو getMyData) */
   const applyEmployeeData = useCallback((data: any, requestStartedAt: number, url?: string) => {
+    // ردّ كامل (لا «بلا تغيير»): تُحفظ البيانات مع رقم نسختها ولحظة المزامنة الكاملة
+    if (!data.unchanged && Array.isArray(data.customers)) {
+      try {
+        localStorage.setItem(DATA_VERSION_KEY, data.dataVersion ? String(data.dataVersion) : '');
+        localStorage.setItem(DATA_OWNER_KEY, data.user && data.user.id ? String(data.user.id) : '');
+        localStorage.setItem(FULL_SYNC_AT_KEY, String(Date.now()));
+      } catch (e) {}
+    }
     if (Array.isArray(data.customers)) {
       setCustomers(data.customers);
       try { localStorage.setItem('uniteam_customers', JSON.stringify(data.customers)); } catch (e) {}
@@ -317,7 +381,8 @@ const App: React.FC = () => {
    */
   const syncWithCloud = useCallback(async (
     timeoutMs: number = SYNC_TIMEOUT_MS,
-    urlOverride?: string
+    urlOverride?: string,
+    full: boolean = false
   ): Promise<any | null> => {
     const url = urlOverride || configRef.current.syncUrl;
     const user = currentUserRef.current;
@@ -333,9 +398,6 @@ const App: React.FC = () => {
     setSyncError(false);
 
     try {
-      // مزامنة الوقت بالخلفية لضمان دقة ساعة التطبيق بالتوقيت المصري وحمايته من التلاعب
-      syncTimeWithServer().catch(e => console.warn('Background time sync failed', e));
-
       const payload = user.role === 'admin'
         ? {
             action: 'getAdminData',
@@ -346,7 +408,9 @@ const App: React.FC = () => {
             action: 'getMyData',
             nationalId: user.nationalId,
             password: user.password,
-            deviceId: getDeviceFingerprint()
+            deviceId: getDeviceFingerprint(),
+            // إن لم تتغيّر البيانات على الخادم لم يُرسلها ثانيةً
+            knownVersion: full ? undefined : readKnownDataVersion(user.id)
           };
 
       const data = await postJson(url, payload, timeoutMs);
@@ -385,8 +449,8 @@ const App: React.FC = () => {
 
   // التحميل الأول
   useEffect(() => {
-    // مزامنة الوقت فور تشغيل التطبيق
-    syncTimeWithServer().catch(e => console.warn('On-load time sync failed', e));
+    // مزامنة الوقت تتم من ردّ server-config.json الذي يُطلب عند الفتح أصلاً
+    // (انظر checkForUpdates) — لا طلب منفصل لها.
 
     const savedBranches = localStorage.getItem('cusfollow_branches');
     const savedJobs = localStorage.getItem('cusfollow_jobs');
@@ -395,33 +459,8 @@ const App: React.FC = () => {
       if (savedJobs) setJobs(JSON.parse(savedJobs));
     } catch (e) {}
 
-    // قائمة العملاء والأسباب تعمل بلا اتصال — الموظف يرى عملاءه ويبحث
-    // فيهم قبل أن تصل المزامنة، ولا يفتح زيارة إلا والشبكة قائمة.
-    try {
-      const savedCustomers = localStorage.getItem('uniteam_customers');
-      const savedReasons = localStorage.getItem('uniteam_visit_reasons');
-      if (savedCustomers) setCustomers(JSON.parse(savedCustomers));
-      if (savedReasons) setVisitReasons(JSON.parse(savedReasons));
-    } catch (e) {}
-
-    // استعادة الجلسة. جلسة المسؤول لا تُستعاد إلا وكلمة مروره في ذاكرة
-    // هذه النافذة — وإلا فلا وسيلة لطلب بياناته، فيعود لشاشة الدخول.
-    let restored: User | null = null;
-    try {
-      const savedUser = localStorage.getItem('cusfollow_current_user');
-      if (savedUser) {
-        const parsed: User = JSON.parse(savedUser);
-        if (parsed.role === 'admin' && !readAdminSession()) {
-          localStorage.removeItem('cusfollow_current_user');
-        } else {
-          restored = parsed;
-        }
-      }
-    } catch (e) {}
-    if (restored) {
-      currentUserRef.current = restored;
-      setCurrentUser(restored);
-    }
+    // الجلسة والعملاء قُرئت قبل أول رسم (قيم useState الابتدائية)
+    const restored = currentUserRef.current;
 
     // رابط الخادم ممرَّر في الرابط (?c=...)
     const params = new URLSearchParams(window.location.search);
@@ -559,7 +598,10 @@ const App: React.FC = () => {
     const checkForUpdates = async () => {
       if (!navigator.onLine) return;
       try {
+        const startTime = performance.now();
         const res = await fetch('./server-config.json?t=' + Date.now());
+        // ساعة التطبيق تُضبط من تاريخ هذا الردّ نفسه — طلب واحد بدل ثلاثة
+        syncTimeWithServer({ res, startTime }).catch(e => console.warn('Time sync failed', e));
         if (res.ok) {
           const data = await res.json();
 
@@ -766,7 +808,8 @@ const App: React.FC = () => {
             {config.syncUrl && currentUser && (
               <button
                 onClick={() => {
-                  syncWithCloud();
+                  // زر «تحديث» مزامنة كاملة دائماً — لا يعتمد على رقم النسخة
+                  syncWithCloud(SYNC_TIMEOUT_MS, undefined, true);
                   logAction('تحديث البيانات', 'مزامنة يدوية من الهيدر');
                 }}
                 disabled={isSyncing}
